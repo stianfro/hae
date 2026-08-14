@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 import OSLog
+import ServiceManagement
+import UserNotifications
 
 #if canImport(HaeCore)
   import HaeCore
@@ -15,6 +17,48 @@ enum ApplicationState: Equatable {
   case failed(String)
 }
 
+struct SessionListItem: Identifiable, Equatable {
+  let id: UUID
+  let title: String
+  let status: SessionStatus
+  let createdAt: Date
+  let durationFrames: Int64
+  let hasTranscript: Bool
+  let hasAudio: Bool
+
+  var canRetryTranscription: Bool {
+    hasAudio && status != .completed && status != .recording
+  }
+
+  var durationText: String {
+    let totalSeconds = max(0, durationFrames / 16_000)
+    let hours = totalSeconds / 3_600
+    let minutes = (totalSeconds / 60) % 60
+    let seconds = totalSeconds % 60
+    if hours > 0 {
+      return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+    }
+    return String(format: "%d:%02d", minutes, seconds)
+  }
+
+  var statusText: String {
+    switch status {
+    case .recording:
+      "Recording"
+    case .captured:
+      "Captured"
+    case .finalizing:
+      "Transcribing"
+    case .completed:
+      "Complete"
+    case .interrupted:
+      "Interrupted"
+    case .failed:
+      "Failed"
+    }
+  }
+}
+
 @MainActor
 final class AppCoordinator: ObservableObject {
   @Published private(set) var state: ApplicationState = .idle
@@ -22,11 +66,22 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var activeMicrophoneName = "System default"
   @Published private(set) var availableMicrophones: [MicrophoneDevice] = []
   @Published private(set) var selectedMicrophoneID: String?
+  @Published private(set) var availableDisplays: [CaptureDisplayDevice] = []
+  @Published private(set) var selectedDisplayID: CGDirectDisplayID?
   @Published private(set) var modelNotice: String?
   @Published private(set) var storageNotice: String?
   @Published private(set) var signalWarnings: [String] = []
   @Published private(set) var sessionDirectory: URL?
   @Published private(set) var transcriptActionNotice: String?
+  @Published private(set) var sessionHistory: [SessionListItem] = []
+  @Published private(set) var sessionActionNotice: String?
+  @Published private(set) var audioRetentionPolicy: AudioRetentionPolicy = .sevenDays
+  @Published private(set) var launchAtLoginEnabled = false
+  @Published private(set) var completionNotificationsEnabled = true
+  @Published private(set) var preventIdleSleepEnabled = true
+  @Published private(set) var preserveSeparateTracksEnabled = false
+  @Published private(set) var systemAudioGain: Float = 1
+  @Published private(set) var microphoneGain: Float = 0.9
 
   private static let logger = Logger(subsystem: "no.froystein.hae", category: "session")
   private let permissionManager = PermissionManager()
@@ -42,8 +97,34 @@ final class AppCoordinator: ObservableObject {
   private var activity: NSObjectProtocol?
   private var lastSystemSignalAt: Date?
   private var lastMicrophoneSignalAt: Date?
+  private var storedSessions: [StoredSession] = []
 
   init() {
+    let defaults = UserDefaults.standard
+    if let saved = UserDefaults.standard.string(forKey: "audioRetentionPolicy"),
+      let policy = AudioRetentionPolicy(rawValue: saved)
+    {
+      audioRetentionPolicy = policy
+    }
+    if let saved = UserDefaults.standard.string(forKey: "captureDisplayID"),
+      let id = CGDirectDisplayID(saved)
+    {
+      selectedDisplayID = id
+    }
+    if defaults.object(forKey: "completionNotificationsEnabled") != nil {
+      completionNotificationsEnabled = defaults.bool(forKey: "completionNotificationsEnabled")
+    }
+    if defaults.object(forKey: "preventIdleSleepEnabled") != nil {
+      preventIdleSleepEnabled = defaults.bool(forKey: "preventIdleSleepEnabled")
+    }
+    preserveSeparateTracksEnabled = defaults.bool(forKey: "preserveSeparateTracksEnabled")
+    if defaults.object(forKey: "systemAudioGain") != nil {
+      systemAudioGain = Float(defaults.double(forKey: "systemAudioGain"))
+    }
+    if defaults.object(forKey: "microphoneGain") != nil {
+      microphoneGain = Float(defaults.double(forKey: "microphoneGain"))
+    }
+    launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
     refreshMicrophones()
     observeLifecycleNotifications()
     Task { [weak self] in
@@ -106,7 +187,6 @@ final class AppCoordinator: ObservableObject {
 
   func startRecording() async {
     state = .preparing
-    repository = nil
     manifest = nil
     paths = nil
     sessionDirectory = nil
@@ -143,7 +223,21 @@ final class AppCoordinator: ObservableObject {
       let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
       let (manifest, paths) = try await repository.createSession(model: descriptor)
       let writer = try DurablePCMWriter(url: paths.mixedPCM)
-      let pipeline = AudioPipeline(writer: writer) { [weak self] snapshot in
+      var sourceWriters: [AudioSource: DurablePCMWriter] = [:]
+      if preserveSeparateTracksEnabled {
+        sourceWriters[.system] = try DurablePCMWriter(url: paths.systemPCM)
+        sourceWriters[.microphone] = try DurablePCMWriter(url: paths.microphonePCM)
+      }
+      let mixerConfiguration = MixerConfiguration(
+        systemGain: systemAudioGain,
+        microphoneGain: microphoneGain
+      )
+      let pipeline = AudioPipeline(
+        writer: writer,
+        sourceWriters: sourceWriters,
+        mixerConfiguration: mixerConfiguration
+      ) {
+        [weak self] snapshot in
         Task { @MainActor [weak self] in self?.updateMeter(snapshot) }
       }
       let microphone = MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)
@@ -164,10 +258,14 @@ final class AppCoordinator: ObservableObject {
       sessionDirectory = paths.directory
       beginProtectedActivity()
 
-      let metadata = try await capture.start(microphoneDeviceID: selectedMicrophoneID)
+      let metadata = try await capture.start(
+        displayID: selectedDisplayID,
+        microphoneDeviceID: selectedMicrophoneID
+      )
       var updatedManifest = manifest
       updatedManifest.captureDisplayID = metadata.displayID
       updatedManifest.microphoneDeviceID = metadata.microphoneDeviceID
+      updatedManifest.separateTracks = preserveSeparateTracksEnabled
       try await repository.save(updatedManifest, paths: paths)
       self.manifest = updatedManifest
       state = .recording
@@ -237,9 +335,225 @@ final class AppCoordinator: ObservableObject {
     Task { await retryCurrentTranscription() }
   }
 
+  func retryTranscription(sessionID: UUID) {
+    guard !isBusy, let session = storedSession(id: sessionID), let repository else { return }
+    guard Self.isRetryable(session.manifest.status) else { return }
+    manifest = session.manifest
+    paths = session.paths
+    sessionDirectory = session.paths.directory
+    state = .failed("Ready to retry transcription.")
+    self.repository = repository
+    retryTranscription()
+  }
+
   func openSessionDirectory() {
     guard let sessionDirectory else { return }
     NSWorkspace.shared.activateFileViewerSelecting([sessionDirectory])
+  }
+
+  func openSessionsFolder() {
+    do {
+      let sessions = try SessionRepository.applicationSupportSessionsDirectory()
+      NSWorkspace.shared.open(sessions)
+    } catch {
+      sessionActionNotice = "Could not open the sessions folder: \(error.localizedDescription)"
+    }
+  }
+
+  func openTranscript(sessionID: UUID) {
+    guard let session = storedSession(id: sessionID) else { return }
+    guard FileManager.default.fileExists(atPath: session.paths.transcriptText.path) else {
+      sessionActionNotice = "This session does not have a completed transcript."
+      return
+    }
+    if NSWorkspace.shared.open(session.paths.transcriptText) {
+      sessionActionNotice = "Opened \(session.manifest.title)."
+    } else {
+      sessionActionNotice = "No application could open this transcript."
+    }
+  }
+
+  func revealSession(sessionID: UUID) {
+    guard let session = storedSession(id: sessionID) else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([session.paths.directory])
+  }
+
+  func exportSession(sessionID: UUID) {
+    guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    guard FileManager.default.fileExists(atPath: session.paths.transcriptJSON.path) else {
+      sessionActionNotice = "This session does not have transcript files to export."
+      return
+    }
+
+    let panel = NSOpenPanel()
+    panel.title = "Export transcript"
+    panel.message = "Choose a folder for the transcript exports."
+    panel.prompt = "Export"
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.canCreateDirectories = true
+    panel.allowsMultipleSelection = false
+    guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+    Task {
+      let accessed = destination.startAccessingSecurityScopedResource()
+      defer {
+        if accessed { destination.stopAccessingSecurityScopedResource() }
+      }
+      do {
+        let exported = try await repository.exportTranscripts(
+          paths: session.paths,
+          to: destination
+        )
+        sessionActionNotice = "Exported transcript files."
+        NSWorkspace.shared.activateFileViewerSelecting([exported])
+      } catch {
+        sessionActionNotice = "Could not export the transcript: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func renameSession(sessionID: UUID, title: String) {
+    guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    Task {
+      do {
+        let renamed = try await repository.renameSession(paths: session.paths, title: title)
+        if FileManager.default.fileExists(atPath: session.paths.transcriptJSON.path) {
+          let store = TranscriptStore()
+          let transcript = try await store.load(paths: session.paths)
+          try await store.write(transcript, paths: session.paths, title: renamed.title)
+        }
+        if manifest?.id == renamed.id { manifest = renamed }
+        sessionActionNotice = "Renamed session."
+        await refreshSessionHistory(using: repository)
+      } catch {
+        sessionActionNotice = "Could not rename the session: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func deleteSessionAudio(sessionID: UUID) {
+    guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    Task {
+      do {
+        try await repository.deleteAudio(paths: session.paths)
+        sessionActionNotice = "Deleted retained audio. The transcript was kept."
+        await refreshSessionHistory(using: repository)
+      } catch {
+        sessionActionNotice = "Could not delete session audio: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func deleteSession(sessionID: UUID) {
+    guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    Task {
+      do {
+        try await repository.deleteSession(paths: session.paths)
+        if manifest?.id == sessionID {
+          manifest = nil
+          paths = nil
+          sessionDirectory = nil
+          state = .idle
+        }
+        sessionActionNotice = "Deleted session."
+        await refreshSessionHistory(using: repository)
+        restoreMostRecentDisplayedSession()
+      } catch {
+        sessionActionNotice = "Could not delete the session: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func setAudioRetentionPolicy(_ policy: AudioRetentionPolicy) {
+    guard !isBusy else { return }
+    audioRetentionPolicy = policy
+    UserDefaults.standard.set(policy.rawValue, forKey: "audioRetentionPolicy")
+    guard let repository else { return }
+    Task {
+      await refreshSessionHistory(using: repository, applyingRetention: true)
+      sessionActionNotice = "Audio retention updated."
+    }
+  }
+
+  func setLaunchAtLogin(_ enabled: Bool) {
+    guard !isBusy else { return }
+    do {
+      if enabled {
+        try SMAppService.mainApp.register()
+      } else {
+        try SMAppService.mainApp.unregister()
+      }
+      launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+      sessionActionNotice =
+        launchAtLoginEnabled
+        ? "Hæ? will start when you log in."
+        : "Launch at login disabled."
+    } catch {
+      launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+      sessionActionNotice = "Could not update launch at login: \(error.localizedDescription)"
+    }
+  }
+
+  func setCompletionNotifications(_ enabled: Bool) {
+    completionNotificationsEnabled = enabled
+    UserDefaults.standard.set(enabled, forKey: "completionNotificationsEnabled")
+    guard enabled else { return }
+    Task {
+      do {
+        let granted = try await UNUserNotificationCenter.current().requestAuthorization(
+          options: [.alert, .sound]
+        )
+        if !granted {
+          completionNotificationsEnabled = false
+          UserDefaults.standard.set(false, forKey: "completionNotificationsEnabled")
+          sessionActionNotice = "Completion notifications were not allowed."
+        }
+      } catch {
+        completionNotificationsEnabled = false
+        UserDefaults.standard.set(false, forKey: "completionNotificationsEnabled")
+        sessionActionNotice = "Could not enable notifications: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func setPreventIdleSleep(_ enabled: Bool) {
+    guard !isBusy else { return }
+    preventIdleSleepEnabled = enabled
+    UserDefaults.standard.set(enabled, forKey: "preventIdleSleepEnabled")
+  }
+
+  func setPreserveSeparateTracks(_ enabled: Bool) {
+    guard !isBusy else { return }
+    preserveSeparateTracksEnabled = enabled
+    UserDefaults.standard.set(enabled, forKey: "preserveSeparateTracksEnabled")
+  }
+
+  func setSystemAudioGain(_ gain: Float) {
+    guard !isBusy else { return }
+    systemAudioGain = min(1.5, max(0, gain))
+    UserDefaults.standard.set(Double(systemAudioGain), forKey: "systemAudioGain")
+  }
+
+  func setMicrophoneGain(_ gain: Float) {
+    guard !isBusy else { return }
+    microphoneGain = min(1.5, max(0, gain))
+    UserDefaults.standard.set(Double(microphoneGain), forKey: "microphoneGain")
+  }
+
+  func verifyInstalledModels() {
+    guard !isBusy else { return }
+    modelNotice = "Verifying transcription models"
+    Task {
+      do {
+        let modelManifest = try ModelManager.loadManifest(from: locateModelManifest())
+        let manager = ModelManager(manifest: modelManifest)
+        _ = try await manager.verifyDefaultModel(in: Self.locateModelDirectory())
+        modelNotice = "Transcription models verified"
+      } catch {
+        modelNotice = "Model verification failed: \(error.localizedDescription)"
+      }
+    }
   }
 
   func refreshMicrophones() {
@@ -257,6 +571,37 @@ final class AppCoordinator: ObservableObject {
       activeMicrophoneName =
         MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)?.name
         ?? "System default"
+    }
+  }
+
+  func refreshDisplays(showErrors: Bool = false) async {
+    do {
+      let displays = try await CaptureDisplayRepository.availableDisplays()
+      availableDisplays = displays
+      if let selectedDisplayID, !displays.contains(where: { $0.id == selectedDisplayID }) {
+        self.selectedDisplayID = nil
+        UserDefaults.standard.removeObject(forKey: "captureDisplayID")
+      }
+    } catch {
+      availableDisplays = []
+      if showErrors {
+        sessionActionNotice = "Could not list displays: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  func selectDisplay(id: CGDirectDisplayID?) {
+    guard !isBusy else { return }
+    guard id == nil || availableDisplays.contains(where: { $0.id == id }) else {
+      selectedDisplayID = nil
+      UserDefaults.standard.removeObject(forKey: "captureDisplayID")
+      return
+    }
+    selectedDisplayID = id
+    if let id {
+      UserDefaults.standard.set(String(id), forKey: "captureDisplayID")
+    } else {
+      UserDefaults.standard.removeObject(forKey: "captureDisplayID")
     }
   }
 
@@ -376,8 +721,12 @@ final class AppCoordinator: ObservableObject {
     do {
       let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
       let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
-      let sessions = try await repository.recoverSessions()
+      var sessions = try await repository.recoverSessions()
+      sessions = try await applyAudioRetention(to: sessions, using: repository)
       guard state == .idle, paths == nil else { return }
+
+      self.repository = repository
+      updateSessionHistory(sessions)
 
       guard
         let recent = sessions.first(where: { session in
@@ -394,7 +743,6 @@ final class AppCoordinator: ObservableObject {
       else { return }
 
       if Self.isRetryable(recent.manifest.status) {
-        self.repository = repository
         manifest = recent.manifest
         paths = recent.paths
         sessionDirectory = recent.paths.directory
@@ -402,7 +750,6 @@ final class AppCoordinator: ObservableObject {
         return
       }
 
-      self.repository = repository
       manifest = recent.manifest
       paths = recent.paths
       sessionDirectory = recent.paths.directory
@@ -412,6 +759,67 @@ final class AppCoordinator: ObservableObject {
         "Session recovery failed: \(error.localizedDescription, privacy: .public)"
       )
     }
+  }
+
+  private func refreshSessionHistory(
+    using repository: SessionRepository,
+    applyingRetention: Bool = false
+  ) async {
+    do {
+      var sessions = try await repository.recoverSessions()
+      if applyingRetention {
+        sessions = try await applyAudioRetention(to: sessions, using: repository)
+      }
+      updateSessionHistory(sessions)
+    } catch {
+      sessionActionNotice = "Could not refresh session history: \(error.localizedDescription)"
+    }
+  }
+
+  private func applyAudioRetention(
+    to sessions: [StoredSession],
+    using repository: SessionRepository
+  ) async throws -> [StoredSession] {
+    for session in sessions
+    where audioRetentionPolicy.shouldDeleteAudio(for: session.manifest)
+      && FileManager.default.fileExists(atPath: session.paths.mixedPCM.path)
+    {
+      try await repository.deleteAudio(paths: session.paths)
+    }
+    return sessions
+  }
+
+  private func updateSessionHistory(_ sessions: [StoredSession]) {
+    storedSessions = sessions
+    sessionHistory = sessions.map { session in
+      SessionListItem(
+        id: session.manifest.id,
+        title: session.manifest.title,
+        status: session.manifest.status,
+        createdAt: session.manifest.createdAt,
+        durationFrames: session.manifest.durationFrames,
+        hasTranscript: FileManager.default.fileExists(atPath: session.paths.transcriptText.path),
+        hasAudio: FileManager.default.fileExists(atPath: session.paths.mixedPCM.path)
+      )
+    }
+  }
+
+  private func storedSession(id: UUID) -> StoredSession? {
+    storedSessions.first { $0.manifest.id == id }
+  }
+
+  private func restoreMostRecentDisplayedSession() {
+    guard manifest == nil else { return }
+    guard
+      let recent = storedSessions.first(where: { session in
+        session.manifest.status == .completed
+          && FileManager.default.fileExists(atPath: session.paths.transcriptText.path)
+      })
+    else { return }
+    manifest = recent.manifest
+    paths = recent.paths
+    sessionDirectory = recent.paths.directory
+    state = .completed
   }
 
   private func retryCurrentTranscription() async {
@@ -467,6 +875,8 @@ final class AppCoordinator: ObservableObject {
       try await repository.save(completed, paths: paths)
       manifest = completed
       state = .completed
+      await refreshSessionHistory(using: repository, applyingRetention: true)
+      await sendCompletionNotification(title: completed.title)
       Self.logger.info("Final transcription completed")
       endProtectedActivity()
       clearActiveComponents()
@@ -585,6 +995,7 @@ final class AppCoordinator: ObservableObject {
     try? await repository.save(manifest, paths: paths)
     self.manifest = manifest
     state = .failed("Recording interrupted. Audio was preserved.")
+    await refreshSessionHistory(using: repository)
     endProtectedActivity()
     clearActiveComponents()
   }
@@ -599,6 +1010,7 @@ final class AppCoordinator: ObservableObject {
       try? await repository.save(manifest, paths: paths)
     }
     state = .failed(error.localizedDescription)
+    if let repository { await refreshSessionHistory(using: repository) }
     endProtectedActivity()
     clearActiveComponents()
   }
@@ -611,6 +1023,7 @@ final class AppCoordinator: ObservableObject {
       self.manifest = manifest
     }
     state = .failed("Transcription failed. Audio was preserved: \(error.localizedDescription)")
+    if let repository { await refreshSessionHistory(using: repository) }
     endProtectedActivity()
     clearActiveComponents()
   }
@@ -673,11 +1086,40 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func beginProtectedActivity() {
+    var options: ProcessInfo.ActivityOptions = [.userInitiated]
+    if preventIdleSleepEnabled { options.insert(.idleSystemSleepDisabled) }
     activity = ProcessInfo.processInfo.beginActivity(
-      options: [.userInitiated, .idleSystemSleepDisabled],
+      options: options,
       reason: "Recording and transcribing a local meeting"
     )
     ProcessInfo.processInfo.disableSuddenTermination()
+  }
+
+  private func sendCompletionNotification(title: String) async {
+    guard completionNotificationsEnabled else { return }
+    let center = UNUserNotificationCenter.current()
+    do {
+      var authorizationStatus = await center.notificationSettings().authorizationStatus
+      if authorizationStatus == .notDetermined {
+        let granted = try await center.requestAuthorization(options: [.alert, .sound])
+        authorizationStatus = granted ? .authorized : .denied
+      }
+      guard authorizationStatus == .authorized else { return }
+      let content = UNMutableNotificationContent()
+      content.title = "Transcript ready"
+      content.body = title
+      content.sound = .default
+      let request = UNNotificationRequest(
+        identifier: "transcript-\(UUID().uuidString)",
+        content: content,
+        trigger: nil
+      )
+      try await center.add(request)
+    } catch {
+      Self.logger.error(
+        "Completion notification failed: \(error.localizedDescription, privacy: .public)"
+      )
+    }
   }
 
   private func endProtectedActivity() {

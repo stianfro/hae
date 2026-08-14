@@ -177,6 +177,37 @@ public actor SessionRepository {
     }
   }
 
+  public func exportTranscripts(paths: SessionPaths, to destinationDirectory: URL) throws -> URL {
+    try validate(paths: paths)
+    let manifest = try load(paths: paths)
+    let baseName = Self.safeExportName(manifest.title, fallback: manifest.id.uuidString)
+    var exportDirectory = destinationDirectory.appendingPathComponent(baseName, isDirectory: true)
+    if FileManager.default.fileExists(atPath: exportDirectory.path) {
+      exportDirectory = destinationDirectory.appendingPathComponent(
+        "\(baseName)-\(manifest.id.uuidString.prefix(8))",
+        isDirectory: true
+      )
+    }
+    try FileManager.default.createDirectory(
+      at: exportDirectory,
+      withIntermediateDirectories: true
+    )
+
+    let files = [
+      paths.transcriptJSON,
+      paths.transcriptMarkdown,
+      paths.transcriptText,
+      paths.transcriptSRT,
+    ]
+    for source in files where FileManager.default.fileExists(atPath: source.path) {
+      try FileManager.default.copyItem(
+        at: source,
+        to: exportDirectory.appendingPathComponent(source.lastPathComponent)
+      )
+    }
+    return exportDirectory
+  }
+
   public static func completePCMFrameCount(
     at url: URL,
     repairTrailingByte: Bool
@@ -201,6 +232,15 @@ public actor SessionRepository {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     return "Meeting \(formatter.string(from: date))"
+  }
+
+  private static func safeExportName(_ title: String, fallback: String) -> String {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " -_"))
+    let filtered = title.unicodeScalars.map { allowed.contains($0) ? Character(String($0)) : "-" }
+    let collapsed = String(filtered)
+      .split(whereSeparator: { $0 == " " || $0 == "-" })
+      .joined(separator: "-")
+    return collapsed.isEmpty ? fallback : collapsed
   }
 
   private func validate(paths: SessionPaths) throws {

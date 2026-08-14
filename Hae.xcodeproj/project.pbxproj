@@ -18,6 +18,7 @@
 		6D3E10E059268A3602CEDFDE /* CaptureStreamOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */; };
 		0E699B68728563440A02E87D /* CapturedAudioBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */; };
 		23AB9578FD2D62FC05BF4AB1 /* MicrophoneDeviceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */; };
+		C1E0B17F39164E218FDF6BD1 /* CaptureDisplayRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 289C1A131847457F92BC23D0 /* CaptureDisplayRepository.swift */; };
 		249297673A48DA90C2C1370D /* HashVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F8057404099D474109215F /* HashVerifier.swift */; };
 		1718547969DD235731BE65B8 /* ModelDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */; };
 		042C72216392D1228190ED9A /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DA33FB5B253A7B4805F442 /* ModelManager.swift */; };
@@ -66,6 +67,7 @@
 		C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CaptureStreamOutput.swift; sourceTree = SOURCE_ROOT; };
 		F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CapturedAudioBuffer.swift; sourceTree = SOURCE_ROOT; };
 		8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/MicrophoneDeviceRepository.swift; sourceTree = SOURCE_ROOT; };
+		289C1A131847457F92BC23D0 /* CaptureDisplayRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CaptureDisplayRepository.swift; sourceTree = SOURCE_ROOT; };
 		54F8057404099D474109215F /* HashVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/HashVerifier.swift; sourceTree = SOURCE_ROOT; };
 		B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/ModelDescriptor.swift; sourceTree = SOURCE_ROOT; };
 		91DA33FB5B253A7B4805F442 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/ModelManager.swift; sourceTree = SOURCE_ROOT; };
@@ -108,6 +110,7 @@
 				C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */,
 				F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */,
 				8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */,
+				289C1A131847457F92BC23D0 /* CaptureDisplayRepository.swift */,
 				54F8057404099D474109215F /* HashVerifier.swift */,
 				B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */,
 				91DA33FB5B253A7B4805F442 /* ModelManager.swift */,
@@ -162,6 +165,7 @@
 				6D3E10E059268A3602CEDFDE /* CaptureStreamOutput.swift in Sources */,
 				0E699B68728563440A02E87D /* CapturedAudioBuffer.swift in Sources */,
 				23AB9578FD2D62FC05BF4AB1 /* MicrophoneDeviceRepository.swift in Sources */,
+				C1E0B17F39164E218FDF6BD1 /* CaptureDisplayRepository.swift in Sources */,
 				249297673A48DA90C2C1370D /* HashVerifier.swift in Sources */,
 				1718547969DD235731BE65B8 /* ModelDescriptor.swift in Sources */,
 				042C72216392D1228190ED9A /* ModelManager.swift in Sources */,

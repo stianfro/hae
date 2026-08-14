@@ -20,23 +20,29 @@ public final class AudioPipeline: @unchecked Sendable {
 
   private let queue = DispatchQueue(label: "no.froystein.hae.audio.processing")
   private let writer: DurablePCMWriter
+  private let sourceWriters: [AudioSource: DurablePCMWriter]
   private let meterHandler: @Sendable (AudioMeterSnapshot) -> Void
   private var converters: [AudioSource: PCMConverter] = [:]
   private var pendingStartBuffers: [AudioSource: [ConvertedBuffer]] = [:]
-  private var mixer = TimelineMixer()
+  private var mixer: TimelineMixer
   private var originSeconds: Double?
   private var meterLevels: [AudioSource: Float] = [.system: 0, .microphone: 0]
   private var nextOutputFrame: [AudioSource: Int64] = [:]
   private var lastFedFrame: [AudioSource: Int64] = [:]
+  private var sourceWrittenFrames: [AudioSource: Int64] = [:]
   private var lastMeterEmissionNanoseconds: UInt64?
   private var storedError: Error?
   private var isFinishing = false
 
   public init(
     writer: DurablePCMWriter,
+    sourceWriters: [AudioSource: DurablePCMWriter] = [:],
+    mixerConfiguration: MixerConfiguration = MixerConfiguration(),
     meterHandler: @escaping @Sendable (AudioMeterSnapshot) -> Void
   ) {
     self.writer = writer
+    self.sourceWriters = sourceWriters
+    mixer = TimelineMixer(configuration: mixerConfiguration)
     self.meterHandler = meterHandler
   }
 
@@ -66,8 +72,7 @@ public final class AudioPipeline: @unchecked Sendable {
   }
 
   public func finish() async throws -> Int64 {
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
+    let processingError: Error? = await withCheckedContinuation { continuation in
       queue.async { [self] in
         isFinishing = true
         if originSeconds == nil {
@@ -93,14 +98,21 @@ public final class AudioPipeline: @unchecked Sendable {
           }
         }
         mixer.flush().forEach(writer.append)
-        if let storedError {
-          continuation.resume(throwing: storedError)
-        } else {
-          continuation.resume(returning: ())
-        }
+        continuation.resume(returning: storedError)
       }
     }
-    return try await writer.finish()
+    let durationFrames = try await writer.finish()
+    for (source, sourceWriter) in sourceWriters {
+      let writtenFrames = sourceWrittenFrames[source] ?? 0
+      if writtenFrames < durationFrames {
+        sourceWriter.append(
+          [Float](repeating: 0, count: Int(durationFrames - writtenFrames))
+        )
+      }
+      _ = try await sourceWriter.finish()
+    }
+    if let processingError { throw processingError }
+    return durationFrames
   }
 
   public func currentWrittenFrames() async -> Int64 {
@@ -151,7 +163,25 @@ public final class AudioPipeline: @unchecked Sendable {
     }
     nextOutputFrame[buffer.source] = startFrame + Int64(samples.count)
     let timed = TimedAudioBuffer(source: buffer.source, startFrame: startFrame, samples: samples)
+    appendSourceTrack(timed)
     feed(timed)
+  }
+
+  private func appendSourceTrack(_ buffer: TimedAudioBuffer) {
+    guard let sourceWriter = sourceWriters[buffer.source] else { return }
+    var samples = buffer.samples
+    var writtenFrames = sourceWrittenFrames[buffer.source] ?? 0
+    if buffer.startFrame > writtenFrames {
+      sourceWriter.append(
+        [Float](repeating: 0, count: Int(buffer.startFrame - writtenFrames))
+      )
+      writtenFrames = buffer.startFrame
+    } else if buffer.startFrame < writtenFrames {
+      let overlap = min(samples.count, Int(writtenFrames - buffer.startFrame))
+      samples.removeFirst(overlap)
+    }
+    sourceWriter.append(samples)
+    sourceWrittenFrames[buffer.source] = writtenFrames + Int64(samples.count)
   }
 
   private func publishMeterIfNeeded() {

@@ -95,3 +95,53 @@ func microphoneSelectionUsesSavedDeviceAndFallsBackSafely() {
     ) == builtIn
   )
 }
+
+@Test
+func audioPipelinePreservesAlignedSourceTracks() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+
+  let mixedURL = directory.appendingPathComponent("mixed.pcm16le")
+  let systemURL = directory.appendingPathComponent("system.pcm16le")
+  let microphoneURL = directory.appendingPathComponent("microphone.pcm16le")
+  let pipeline = AudioPipeline(
+    writer: try DurablePCMWriter(url: mixedURL),
+    sourceWriters: [
+      .system: try DurablePCMWriter(url: systemURL),
+      .microphone: try DurablePCMWriter(url: microphoneURL),
+    ],
+    meterHandler: { _ in }
+  )
+
+  pipeline.enqueue(try capturedBuffer(source: .system, value: 0.2))
+  pipeline.enqueue(try capturedBuffer(source: .microphone, value: 0.6))
+  let frames = try await pipeline.finish()
+
+  let system = PCMFileReader.decodePCM16LE(try Data(contentsOf: systemURL))
+  let microphone = PCMFileReader.decodePCM16LE(try Data(contentsOf: microphoneURL))
+  #expect(system.count == Int(frames))
+  #expect(microphone.count == Int(frames))
+  #expect(abs(system[system.count / 2] - 0.2) < 0.03)
+  #expect(abs(microphone[microphone.count / 2] - 0.6) < 0.03)
+}
+
+private func capturedBuffer(source: AudioSource, value: Float) throws -> CapturedAudioBuffer {
+  let format = try #require(
+    AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )
+  )
+  let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4_800))
+  buffer.frameLength = 4_800
+  let samples = try #require(buffer.floatChannelData?[0])
+  for index in 0..<4_800 { samples[index] = value }
+  return CapturedAudioBuffer(
+    source: source,
+    presentationTimeSeconds: 0,
+    pcmBuffer: buffer
+  )
+}

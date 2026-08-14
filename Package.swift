@@ -34,7 +34,11 @@ let package = Package(
         "Core", "Resources", "Info.plist", "Hae.entitlements",
       ],
       sources: ["App", "Features"],
-      linkerSettings: [.linkedFramework("AppKit")]
+      linkerSettings: [
+        .linkedFramework("AppKit"),
+        .linkedFramework("ServiceManagement"),
+        .linkedFramework("UserNotifications"),
+      ]
     ),
   ]
 )

@@ -40,7 +40,7 @@ public struct SessionManifest: Codable, Equatable, Sendable {
   public let language: String
   public var captureDisplayID: UInt32?
   public var microphoneDeviceID: String?
-  public let separateTracks: Bool
+  public var separateTracks: Bool
   public var finalizationProgress: Double?
   public var failure: SessionFailure?
 

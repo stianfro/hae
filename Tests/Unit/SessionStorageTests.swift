@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -142,6 +143,53 @@ func repositoryRenamesAndDeletesSessions() async throws {
 
   try await repository.deleteSession(paths: paths)
   #expect(!FileManager.default.fileExists(atPath: paths.directory.path))
+}
+
+@Test
+func repositoryExportsTranscriptFormats() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer {
+    try? FileManager.default.removeItem(at: directory)
+    try? FileManager.default.removeItem(at: destination)
+  }
+  let repository = SessionRepository(sessionsDirectory: directory)
+  let (_, paths) = try await repository.createSession(model: makeDescriptor())
+  let transcript = Transcript(
+    sessionID: UUID(),
+    isFinal: true,
+    segments: [TranscriptSegment(startMs: 0, endMs: 1_000, text: "Hei")]
+  )
+  _ = try await repository.renameSession(paths: paths, title: "Test / export")
+  try await TranscriptStore().write(transcript, paths: paths, title: "Test / export")
+
+  let exported = try await repository.exportTranscripts(paths: paths, to: destination)
+
+  #expect(exported.lastPathComponent == "Test-export")
+  #expect(
+    FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.json").path))
+  #expect(
+    FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.md").path))
+  #expect(
+    FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.txt").path))
+  #expect(
+    FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.srt").path))
+}
+
+@Test
+func displaySelectionUsesSavedDisplayAndFallsBack() {
+  let displays = [
+    CaptureDisplayDevice(id: 10, name: "Main", width: 1_920, height: 1_080),
+    CaptureDisplayDevice(id: 20, name: "Second", width: 2_560, height: 1_440),
+  ]
+
+  #expect(
+    CaptureDisplayRepository.preferredDisplay(from: displays, savedID: 20, mainID: 10)?.id == 20
+  )
+  #expect(
+    CaptureDisplayRepository.preferredDisplay(from: displays, savedID: 30, mainID: 10)?.id == 10
+  )
+  #expect(CaptureDisplayRepository.preferredDisplay(from: [], savedID: nil, mainID: 10) == nil)
 }
 
 @Test

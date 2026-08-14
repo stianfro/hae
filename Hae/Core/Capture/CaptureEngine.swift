@@ -38,14 +38,18 @@ public final class CaptureEngine: NSObject, SCStreamDelegate, @unchecked Sendabl
     super.init()
   }
 
-  public func start(microphoneDeviceID: String?) async throws -> CaptureMetadata {
+  public func start(
+    displayID: CGDirectDisplayID?,
+    microphoneDeviceID: String?
+  ) async throws -> CaptureMetadata {
     let content = try await SCShareableContent.excludingDesktopWindows(
       false,
       onScreenWindowsOnly: false
     )
     let mainDisplayID = CGMainDisplayID()
     guard
-      let display = content.displays.first(where: { $0.displayID == mainDisplayID })
+      let display = content.displays.first(where: { $0.displayID == displayID })
+        ?? content.displays.first(where: { $0.displayID == mainDisplayID })
         ?? content.displays.first
     else { throw CaptureEngineError.noDisplay }
 
