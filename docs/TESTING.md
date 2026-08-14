@@ -32,7 +32,8 @@ Use an Apple Silicon Mac running macOS 15 or later.
 2. Open `Hae.xcodeproj`, select the Hae scheme, and configure a stable signing
    identity and bundle identifier.
 3. Start a Teams call with one remote participant.
-4. Run Hæ? and press **Start recording**.
+4. Run Hæ?, choose the intended microphone from the **Microphone** picker, and
+   press **Start recording**.
 5. Grant Screen Recording and microphone permissions when asked. Restart the
    development build if macOS requires it.
 6. Speak locally and ask the remote participant to speak. Confirm both meters
@@ -44,6 +45,8 @@ Use an Apple Silicon Mac running macOS 15 or later.
 10. Press **Open .txt** and confirm `transcript.txt` opens in the default editor.
 11. Open the session directory and check `audio-mix.pcm16le`, `session.json`,
    `transcript.json`, `transcript.md`, `transcript.txt`, and `transcript.srt`.
+   Confirm `microphoneDeviceID` matches the selected microphone, or is `null`
+   when **System default** was selected.
 12. Listen to a temporary playback conversion of the PCM and confirm both
     speakers are present and synchronized.
 13. Confirm the transcript contains phrases spoken by both participants with

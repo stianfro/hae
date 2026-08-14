@@ -20,6 +20,8 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var state: ApplicationState = .idle
   @Published private(set) var meter = AudioMeterSnapshot(system: 0, microphone: 0)
   @Published private(set) var activeMicrophoneName = "System default"
+  @Published private(set) var availableMicrophones: [MicrophoneDevice] = []
+  @Published private(set) var selectedMicrophoneID: String?
   @Published private(set) var modelNotice: String?
   @Published private(set) var sessionDirectory: URL?
   @Published private(set) var transcriptActionNotice: String?
@@ -34,6 +36,10 @@ final class AppCoordinator: ObservableObject {
   private var audioPipeline: AudioPipeline?
   private var modelLoadTask: Task<Void, Error>?
   private var activity: NSObjectProtocol?
+
+  init() {
+    refreshMicrophones()
+  }
 
   var isBusy: Bool {
     switch state {
@@ -81,6 +87,7 @@ final class AppCoordinator: ObservableObject {
     state = .preparing
     modelNotice = nil
     transcriptActionNotice = nil
+    refreshMicrophones()
     do {
       let permissions = await permissionManager.requestRequiredPermissions()
       guard permissions.screenCapture == .granted else {
@@ -102,9 +109,7 @@ final class AppCoordinator: ObservableObject {
       let pipeline = AudioPipeline(writer: writer) { [weak self] snapshot in
         Task { @MainActor [weak self] in self?.meter = snapshot }
       }
-      let microphone = MicrophoneDeviceRepository.selectedDevice(
-        savedID: UserDefaults.standard.string(forKey: "microphoneDeviceID")
-      )
+      let microphone = MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)
       activeMicrophoneName = microphone?.name ?? "System default"
 
       let capture = CaptureEngine(
@@ -122,7 +127,7 @@ final class AppCoordinator: ObservableObject {
       sessionDirectory = paths.directory
       beginProtectedActivity()
 
-      let metadata = try await capture.start(microphoneDeviceID: microphone?.id)
+      let metadata = try await capture.start(microphoneDeviceID: selectedMicrophoneID)
       var updatedManifest = manifest
       updatedManifest.captureDisplayID = metadata.displayID
       updatedManifest.microphoneDeviceID = metadata.microphoneDeviceID
@@ -208,6 +213,40 @@ final class AppCoordinator: ObservableObject {
   func openSessionDirectory() {
     guard let sessionDirectory else { return }
     NSWorkspace.shared.activateFileViewerSelecting([sessionDirectory])
+  }
+
+  func refreshMicrophones() {
+    let devices = MicrophoneDeviceRepository.availableDevices()
+    availableMicrophones = devices
+    let defaults = UserDefaults.standard
+    let savedID = defaults.string(forKey: "microphoneDeviceID")
+    if let savedID, devices.contains(where: { $0.id == savedID }) {
+      selectedMicrophoneID = savedID
+    } else {
+      selectedMicrophoneID = nil
+      defaults.removeObject(forKey: "microphoneDeviceID")
+    }
+    if !isBusy {
+      activeMicrophoneName =
+        MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)?.name
+        ?? "System default"
+    }
+  }
+
+  func selectMicrophone(id: String?) {
+    guard !isBusy else { return }
+    guard id == nil || availableMicrophones.contains(where: { $0.id == id }) else {
+      refreshMicrophones()
+      return
+    }
+    selectedMicrophoneID = id
+    if let id {
+      UserDefaults.standard.set(id, forKey: "microphoneDeviceID")
+    } else {
+      UserDefaults.standard.removeObject(forKey: "microphoneDeviceID")
+    }
+    activeMicrophoneName =
+      MicrophoneDeviceRepository.selectedDevice(savedID: id)?.name ?? "System default"
   }
 
   func copyTranscriptToClipboard() {

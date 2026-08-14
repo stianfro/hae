@@ -25,12 +25,20 @@ public enum MicrophoneDeviceRepository {
 
   public static func selectedDevice(savedID: String?) -> MicrophoneDevice? {
     let devices = availableDevices()
+    let defaultDevice = AVCaptureDevice.default(for: .audio).map {
+      MicrophoneDevice(id: $0.uniqueID, name: $0.localizedName)
+    }
+    return preferredDevice(savedID: savedID, devices: devices, defaultDevice: defaultDevice)
+  }
+
+  public static func preferredDevice(
+    savedID: String?,
+    devices: [MicrophoneDevice],
+    defaultDevice: MicrophoneDevice?
+  ) -> MicrophoneDevice? {
     if let savedID, let saved = devices.first(where: { $0.id == savedID }) {
       return saved
     }
-    guard let defaultDevice = AVCaptureDevice.default(for: .audio) else {
-      return devices.first
-    }
-    return MicrophoneDevice(id: defaultDevice.uniqueID, name: defaultDevice.localizedName)
+    return defaultDevice ?? devices.first
   }
 }

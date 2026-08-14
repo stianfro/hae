@@ -24,6 +24,21 @@ struct MenuBarView: View {
         Spacer()
       }
 
+      Picker(
+        "Microphone",
+        selection: Binding(
+          get: { coordinator.selectedMicrophoneID },
+          set: { coordinator.selectMicrophone(id: $0) }
+        )
+      ) {
+        Text("System default").tag(nil as String?)
+        ForEach(coordinator.availableMicrophones) { microphone in
+          Text(microphone.name).tag(Optional(microphone.id))
+        }
+      }
+      .pickerStyle(.menu)
+      .disabled(coordinator.isBusy)
+
       AudioMeterView(label: "System audio", value: coordinator.meter.system)
       AudioMeterView(label: coordinator.activeMicrophoneName, value: coordinator.meter.microphone)
 
@@ -95,6 +110,7 @@ struct MenuBarView: View {
     }
     .padding(16)
     .frame(width: 360)
+    .onAppear { coordinator.refreshMicrophones() }
     .alert("Quit Hæ?", isPresented: $showQuitConfirmation) {
       Button("Keep running", role: .cancel) {}
       Button("Quit", role: .destructive) { NSApplication.shared.terminate(nil) }

@@ -66,3 +66,32 @@ func levelMeter() {
   #expect(AudioLevelMeter.normalizedLevel(samples: [0, 0]) == 0)
   #expect(AudioLevelMeter.normalizedLevel(samples: [0.5, -0.5]) > 0.8)
 }
+
+@Test
+func microphoneSelectionUsesSavedDeviceAndFallsBackSafely() {
+  let builtIn = MicrophoneDevice(id: "built-in", name: "Built-in microphone")
+  let headset = MicrophoneDevice(id: "headset", name: "USB headset")
+  let devices = [builtIn, headset]
+
+  #expect(
+    MicrophoneDeviceRepository.preferredDevice(
+      savedID: headset.id,
+      devices: devices,
+      defaultDevice: builtIn
+    ) == headset
+  )
+  #expect(
+    MicrophoneDeviceRepository.preferredDevice(
+      savedID: "disconnected",
+      devices: devices,
+      defaultDevice: builtIn
+    ) == builtIn
+  )
+  #expect(
+    MicrophoneDeviceRepository.preferredDevice(
+      savedID: nil,
+      devices: devices,
+      defaultDevice: nil
+    ) == builtIn
+  )
+}
