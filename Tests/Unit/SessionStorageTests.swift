@@ -37,6 +37,30 @@ func repositoryRoundTrip() async throws {
   #expect(loaded == manifest)
 }
 
+@Test
+func transcriptStoreWritesCopyReadyPlainText() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let paths = SessionPaths(directory: directory)
+  let transcript = Transcript(
+    sessionID: UUID(),
+    isFinal: true,
+    segments: [
+      TranscriptSegment(startMs: 0, endMs: 1_000, text: "Første linje."),
+      TranscriptSegment(startMs: 1_000, endMs: 2_000, text: "Second line."),
+    ]
+  )
+
+  try await TranscriptStore().write(transcript, paths: paths, title: "Test")
+
+  #expect(
+    try String(contentsOf: paths.transcriptText, encoding: .utf8) == "Første linje.\nSecond line.\n"
+  )
+  #expect(FileManager.default.fileExists(atPath: paths.transcriptJSON.path))
+  #expect(FileManager.default.fileExists(atPath: paths.transcriptMarkdown.path))
+  #expect(FileManager.default.fileExists(atPath: paths.transcriptSRT.path))
+}
+
 private func makeManifest() -> SessionManifest {
   SessionManifest(
     title: "Test",

@@ -46,6 +46,32 @@ struct MenuBarView: View {
       .controlSize(.large)
       .disabled(buttonDisabled)
 
+      if coordinator.hasCompletedTranscript {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Completed transcript")
+            .font(.caption.weight(.semibold))
+
+          HStack {
+            Button(action: coordinator.copyTranscriptToClipboard) {
+              Label("Copy transcript", systemImage: "doc.on.doc")
+                .frame(maxWidth: .infinity)
+            }
+            Button(action: coordinator.openTranscriptText) {
+              Label("Open .txt", systemImage: "doc.text")
+                .frame(maxWidth: .infinity)
+            }
+          }
+          .buttonStyle(.bordered)
+
+          if let notice = coordinator.transcriptActionNotice {
+            Text(notice)
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+
       HStack {
         Button("Open session") { coordinator.openSessionDirectory() }
           .disabled(coordinator.sessionDirectory == nil)

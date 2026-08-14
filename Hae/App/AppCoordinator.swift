@@ -22,6 +22,7 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var activeMicrophoneName = "System default"
   @Published private(set) var modelNotice: String?
   @Published private(set) var sessionDirectory: URL?
+  @Published private(set) var transcriptActionNotice: String?
 
   private static let logger = Logger(subsystem: "no.froystein.hae", category: "session")
   private let permissionManager = PermissionManager()
@@ -60,6 +61,11 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
+  var hasCompletedTranscript: Bool {
+    guard case .completed = state, let paths else { return false }
+    return FileManager.default.fileExists(atPath: paths.transcriptText.path)
+  }
+
   func toggleRecording() {
     switch state {
     case .recording:
@@ -74,6 +80,7 @@ final class AppCoordinator: ObservableObject {
   func startRecording() async {
     state = .preparing
     modelNotice = nil
+    transcriptActionNotice = nil
     do {
       let permissions = await permissionManager.requestRequiredPermissions()
       guard permissions.screenCapture == .granted else {
@@ -201,6 +208,37 @@ final class AppCoordinator: ObservableObject {
   func openSessionDirectory() {
     guard let sessionDirectory else { return }
     NSWorkspace.shared.activateFileViewerSelecting([sessionDirectory])
+  }
+
+  func copyTranscriptToClipboard() {
+    guard hasCompletedTranscript, let transcriptURL = paths?.transcriptText else {
+      transcriptActionNotice = "The completed transcript is unavailable."
+      return
+    }
+    do {
+      let transcript = try String(contentsOf: transcriptURL, encoding: .utf8)
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      guard pasteboard.setString(transcript, forType: .string) else {
+        transcriptActionNotice = "Could not copy the transcript."
+        return
+      }
+      transcriptActionNotice = "Copied transcript to clipboard."
+    } catch {
+      transcriptActionNotice = "Could not read transcript.txt: \(error.localizedDescription)"
+    }
+  }
+
+  func openTranscriptText() {
+    guard hasCompletedTranscript, let transcriptURL = paths?.transcriptText else {
+      transcriptActionNotice = "The completed transcript is unavailable."
+      return
+    }
+    if NSWorkspace.shared.open(transcriptURL) {
+      transcriptActionNotice = "Opened transcript.txt."
+    } else {
+      transcriptActionNotice = "No application could open transcript.txt."
+    }
   }
 
   func importModels() {
