@@ -40,7 +40,9 @@ public actor WhisperEngine {
 
   public func loadModel(at modelURL: URL, vadModelURL: URL) throws {
     #if canImport(whisper)
-      if let context { whisper_free(context) }
+      if let currentContext = context { whisper_free(currentContext) }
+      context = nil
+      self.vadModelURL = nil
       var parameters = whisper_context_default_params()
       parameters.use_gpu = true
       parameters.flash_attn = true
@@ -66,6 +68,7 @@ public actor WhisperEngine {
     samples: [Float],
     parameters: WhisperParameters = .final
   ) throws -> [TranscriptSegment] {
+    guard !samples.isEmpty else { return [] }
     #if canImport(whisper)
       guard let context, let vadModelURL else { throw WhisperEngineError.modelNotLoaded }
       var whisperParameters = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)

@@ -15,6 +15,9 @@ verify-models:
 build-whisper:
     ./Scripts/build-whisper-xcframework.sh
 
+smoke-model:
+    ./Scripts/smoke-test-model.sh
+
 build:
     ./Scripts/run-swift.sh build
 

@@ -26,6 +26,7 @@ public final class CaptureEngine: NSObject, SCStreamDelegate, @unchecked Sendabl
   private let microphoneQueue = DispatchQueue(label: "no.froystein.hae.capture.microphone")
   private let output: CaptureStreamOutput
   private let stoppedHandler: @Sendable (Error) -> Void
+  private let streamLock = NSLock()
   private var stream: SCStream?
 
   public init(
@@ -68,7 +69,7 @@ public final class CaptureEngine: NSObject, SCStreamDelegate, @unchecked Sendabl
     let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
     try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: systemQueue)
     try stream.addStreamOutput(output, type: .microphone, sampleHandlerQueue: microphoneQueue)
-    self.stream = stream
+    setStream(stream)
     try await stream.startCapture()
     return CaptureMetadata(
       displayID: display.displayID,
@@ -77,13 +78,26 @@ public final class CaptureEngine: NSObject, SCStreamDelegate, @unchecked Sendabl
   }
 
   public func stop() async throws {
-    guard let stream else { return }
+    guard let stream = takeStream() else { return }
     try await stream.stopCapture()
-    self.stream = nil
   }
 
   public func stream(_ stream: SCStream, didStopWithError error: any Error) {
-    self.stream = nil
+    _ = takeStream()
     stoppedHandler(CaptureEngineError.streamStopped(error.localizedDescription))
+  }
+
+  private func setStream(_ stream: SCStream) {
+    streamLock.lock()
+    self.stream = stream
+    streamLock.unlock()
+  }
+
+  private func takeStream() -> SCStream? {
+    streamLock.lock()
+    defer { streamLock.unlock() }
+    let current = stream
+    stream = nil
+    return current
   }
 }

@@ -5,6 +5,29 @@ import Testing
 @testable import HaeCore
 
 @Test
+func durableWriterTruncatesAnExistingFile() async throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let url = directory.appendingPathComponent("audio.pcm16le")
+  try Data(repeating: 0xff, count: 128).write(to: url)
+
+  let writer = try DurablePCMWriter(url: url)
+  writer.append([0.5, -0.5])
+  let frames = try await writer.finish()
+
+  #expect(frames == 2)
+  #expect(try Data(contentsOf: url).count == 4)
+}
+
+@Test
+func emptyTranscriptionInputNeedsNoRuntime() async throws {
+  let segments = try await WhisperEngine().transcribe(samples: [])
+  #expect(segments.isEmpty)
+}
+
+@Test
 func pcm16ConversionHandlesNegativeAndPartialSamples() {
   let data = Data([0x00, 0x80, 0x00, 0x00, 0xff, 0x7f, 0xff])
   let samples = PCMFileReader.decodePCM16LE(data)

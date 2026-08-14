@@ -21,7 +21,8 @@ The app sandbox includes audio input and user-selected file access. It does not
 include `com.apple.security.network.client` or
 `com.apple.security.network.server`. `Scripts/package-release.sh` signs the
 packaged app with `Hae/Hae.entitlements` after verified models are copied into
-the bundle.
+the bundle. Packaging rechecks the bundled model hashes and rejects signed
+entitlements containing network client or server access.
 
 Deleting application files is not secure erasure on APFS or SSD media. FileVault
 should be enabled when recordings need protection at rest.

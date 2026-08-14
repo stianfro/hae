@@ -17,6 +17,8 @@ public final class CaptureStreamOutput: NSObject, SCStreamOutput, @unchecked Sen
   ) {
     guard sampleBuffer.isValid, sampleBuffer.dataReadiness == .ready else { return }
     guard type == .audio || type == .microphone else { return }
+    let presentationTimeSeconds = sampleBuffer.presentationTimeStamp.seconds
+    guard presentationTimeSeconds.isFinite else { return }
     guard let description = sampleBuffer.formatDescription,
       let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(description),
       let format = AVAudioFormat(streamDescription: streamDescription)
@@ -43,7 +45,7 @@ public final class CaptureStreamOutput: NSObject, SCStreamOutput, @unchecked Sen
     handler(
       CapturedAudioBuffer(
         source: source,
-        presentationTimeSeconds: sampleBuffer.presentationTimeStamp.seconds,
+        presentationTimeSeconds: presentationTimeSeconds,
         pcmBuffer: pcmBuffer
       )
     )

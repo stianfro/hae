@@ -13,6 +13,17 @@ mono downmix, audio levels, out-of-order timeline input, missing-source silence,
 mixer gain and limiting, manifest transitions, atomic replacement, partial PCM
 recovery, overlap deduplication, and SRT timestamps.
 
+Run the offline runtime smoke test after fetching the models:
+
+```bash
+just smoke-model
+```
+
+This builds pinned whisper.cpp with its CPU and Accelerate backends in
+`.cache/`. It checks model loading, Silero VAD, inference, and the production
+Swift C bridge. It is useful when full Xcode is unavailable. It does not test
+Metal or ScreenCaptureKit.
+
 ## Phase 0 Teams proof
 
 Use an Apple Silicon Mac running macOS 15 or later.

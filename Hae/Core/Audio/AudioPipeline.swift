@@ -28,6 +28,7 @@ public final class AudioPipeline: @unchecked Sendable {
   private var meterLevels: [AudioSource: Float] = [.system: 0, .microphone: 0]
   private var nextOutputFrame: [AudioSource: Int64] = [:]
   private var lastFedFrame: [AudioSource: Int64] = [:]
+  private var lastMeterEmissionNanoseconds: UInt64?
   private var storedError: Error?
   private var isFinishing = false
 
@@ -104,12 +105,7 @@ public final class AudioPipeline: @unchecked Sendable {
 
   private func accept(_ buffer: ConvertedBuffer) {
     meterLevels[buffer.source] = AudioLevelMeter.normalizedLevel(samples: buffer.samples)
-    meterHandler(
-      AudioMeterSnapshot(
-        system: meterLevels[.system] ?? 0,
-        microphone: meterLevels[.microphone] ?? 0
-      )
-    )
+    publishMeterIfNeeded()
 
     if originSeconds == nil {
       pendingStartBuffers[buffer.source, default: []].append(buffer)
@@ -152,6 +148,23 @@ public final class AudioPipeline: @unchecked Sendable {
     nextOutputFrame[buffer.source] = startFrame + Int64(samples.count)
     let timed = TimedAudioBuffer(source: buffer.source, startFrame: startFrame, samples: samples)
     feed(timed)
+  }
+
+  private func publishMeterIfNeeded() {
+    let now = DispatchTime.now().uptimeNanoseconds
+    let updateInterval: UInt64 = 100_000_000
+    if let lastMeterEmissionNanoseconds,
+      now &- lastMeterEmissionNanoseconds < updateInterval
+    {
+      return
+    }
+    lastMeterEmissionNanoseconds = now
+    meterHandler(
+      AudioMeterSnapshot(
+        system: meterLevels[.system] ?? 0,
+        microphone: meterLevels[.microphone] ?? 0
+      )
+    )
   }
 
   private func feed(_ buffer: TimedAudioBuffer) {

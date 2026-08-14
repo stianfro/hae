@@ -69,7 +69,7 @@ struct MenuBarView: View {
     }
     .padding(16)
     .frame(width: 360)
-    .alert("Quit Hæ??", isPresented: $showQuitConfirmation) {
+    .alert("Quit Hæ?", isPresented: $showQuitConfirmation) {
       Button("Keep running", role: .cancel) {}
       Button("Quit", role: .destructive) { NSApplication.shared.terminate(nil) }
     } message: {

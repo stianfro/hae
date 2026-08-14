@@ -23,7 +23,9 @@ public final class DurablePCMWriter: @unchecked Sendable {
 
   public init(url: URL) throws {
     FileManager.default.createFile(atPath: url.path, contents: nil)
-    handle = try FileHandle(forWritingTo: url)
+    let handle = try FileHandle(forWritingTo: url)
+    try handle.truncate(atOffset: 0)
+    self.handle = handle
   }
 
   public func append(_ samples: [Float]) {

@@ -43,12 +43,18 @@ just format
 just lint
 just test
 just build
+just smoke-model
 just ci
 ```
 
 All development tasks are exposed through the `justfile`. SwiftPM builds the
 core and menu-bar source for quick local verification. The Xcode project builds
 the signed `.app` and links the generated whisper XCFramework.
+
+`just smoke-model` builds a temporary CPU-only whisper.cpp runner under
+`.cache/`, checks the pinned model and VAD with the upstream audio fixture, then
+compiles and runs the production Swift bridge against the same files. This can
+run with Command Line Tools, but it does not replace the Metal or Teams checks.
 
 ## Phase 0 manual proof
 
