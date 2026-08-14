@@ -23,6 +23,8 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var availableMicrophones: [MicrophoneDevice] = []
   @Published private(set) var selectedMicrophoneID: String?
   @Published private(set) var modelNotice: String?
+  @Published private(set) var storageNotice: String?
+  @Published private(set) var signalWarnings: [String] = []
   @Published private(set) var sessionDirectory: URL?
   @Published private(set) var transcriptActionNotice: String?
 
@@ -35,10 +37,18 @@ final class AppCoordinator: ObservableObject {
   private var captureEngine: CaptureEngine?
   private var audioPipeline: AudioPipeline?
   private var modelLoadTask: Task<Void, Error>?
+  private var recordingMonitorTask: Task<Void, Never>?
+  private var workspaceObservers: [NSObjectProtocol] = []
   private var activity: NSObjectProtocol?
+  private var lastSystemSignalAt: Date?
+  private var lastMicrophoneSignalAt: Date?
 
   init() {
     refreshMicrophones()
+    observeLifecycleNotifications()
+    Task { [weak self] in
+      await self?.restoreSessionState()
+    }
   }
 
   var isBusy: Bool {
@@ -72,6 +82,17 @@ final class AppCoordinator: ObservableObject {
     return FileManager.default.fileExists(atPath: paths.transcriptText.path)
   }
 
+  var canRetryTranscription: Bool {
+    guard !isBusy, let manifest, let paths else { return false }
+    guard Self.isRetryable(manifest.status) else { return false }
+    let frameCount =
+      (try? SessionRepository.completePCMFrameCount(
+        at: paths.mixedPCM,
+        repairTrailingByte: false
+      )) ?? 0
+    return frameCount > 0
+  }
+
   func toggleRecording() {
     switch state {
     case .recording:
@@ -85,7 +106,13 @@ final class AppCoordinator: ObservableObject {
 
   func startRecording() async {
     state = .preparing
+    repository = nil
+    manifest = nil
+    paths = nil
+    sessionDirectory = nil
     modelNotice = nil
+    storageNotice = nil
+    signalWarnings = []
     transcriptActionNotice = nil
     refreshMicrophones()
     do {
@@ -97,17 +124,27 @@ final class AppCoordinator: ObservableObject {
         throw CoordinatorError.microphonePermissionDenied
       }
 
+      let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
+      switch try DiskSpacePolicy.status(for: sessionsDirectory) {
+      case .critical:
+        throw CoordinatorError.diskSpaceCritical
+      case .warning(let availableBytes):
+        storageNotice =
+          "Low disk space: \(Self.formatByteCount(availableBytes)) available."
+      case .sufficient:
+        break
+      }
+
       let manifestURL = try locateModelManifest()
       let modelManifest = try ModelManager.loadManifest(from: manifestURL)
       guard let descriptor = modelManifest.models.first else {
         throw ModelManagerError.noModels
       }
-      let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
       let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
       let (manifest, paths) = try await repository.createSession(model: descriptor)
       let writer = try DurablePCMWriter(url: paths.mixedPCM)
       let pipeline = AudioPipeline(writer: writer) { [weak self] snapshot in
-        Task { @MainActor [weak self] in self?.meter = snapshot }
+        Task { @MainActor [weak self] in self?.updateMeter(snapshot) }
       }
       let microphone = MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)
       activeMicrophoneName = microphone?.name ?? "System default"
@@ -134,6 +171,10 @@ final class AppCoordinator: ObservableObject {
       try await repository.save(updatedManifest, paths: paths)
       self.manifest = updatedManifest
       state = .recording
+      let now = Date()
+      lastSystemSignalAt = now
+      lastMicrophoneSignalAt = now
+      startRecordingMonitor()
       Self.logger.info("Recording started")
 
       modelLoadTask = Task { [whisperEngine] in
@@ -170,6 +211,8 @@ final class AppCoordinator: ObservableObject {
       let paths
     else { return }
 
+    recordingMonitorTask?.cancel()
+    recordingMonitorTask = nil
     state = .finalizing(0)
     do {
       try await captureEngine.stop()
@@ -183,31 +226,15 @@ final class AppCoordinator: ObservableObject {
       try await repository.save(manifest, paths: paths)
       self.manifest = manifest
       Self.logger.info("Durable capture closed with \(durationFrames) frames")
-
-      guard let modelLoadTask else { throw CoordinatorError.modelUnavailable }
-      try await modelLoadTask.value
-      let service = FinalTranscriptionService(engine: whisperEngine)
-      let transcript = try await service.transcribe(
-        pcmURL: paths.mixedPCM,
-        sessionID: manifest.id,
-        durationFrames: durationFrames
-      ) { [weak self] progress in
-        await self?.updateFinalizationProgress(progress)
-      }
-      try await TranscriptStore().write(transcript, paths: paths, title: manifest.title)
-
-      var completed = self.manifest ?? manifest
-      completed.finalizationProgress = 1
-      try completed.transition(to: .completed)
-      try await repository.save(completed, paths: paths)
-      self.manifest = completed
-      state = .completed
-      Self.logger.info("Final transcription completed")
-      endProtectedActivity()
-      clearActiveComponents()
+      await finalizeSession(manifest, repository: repository, paths: paths)
     } catch {
-      await handleFinalizationFailure(error)
+      await interruptRecording(error, stopCapture: false)
     }
+  }
+
+  func retryTranscription() {
+    guard canRetryTranscription else { return }
+    Task { await retryCurrentTranscription() }
   }
 
   func openSessionDirectory() {
@@ -329,17 +356,227 @@ final class AppCoordinator: ObservableObject {
     self.manifest = manifest
   }
 
+  private func observeLifecycleNotifications() {
+    let center = NSWorkspace.shared.notificationCenter
+    let interruptions: [(Notification.Name, CoordinatorError)] = [
+      (NSWorkspace.willSleepNotification, .systemSleep),
+      (NSWorkspace.willPowerOffNotification, .systemShutdown),
+    ]
+    workspaceObservers = interruptions.map { name, error in
+      center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          guard let self, self.state == .recording else { return }
+          await self.interruptRecording(error, stopCapture: true)
+        }
+      }
+    }
+  }
+
+  private func restoreSessionState() async {
+    do {
+      let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
+      let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
+      let sessions = try await repository.recoverSessions()
+      guard state == .idle, paths == nil else { return }
+
+      guard
+        let recent = sessions.first(where: { session in
+          if session.manifest.status == .completed {
+            return FileManager.default.fileExists(atPath: session.paths.transcriptText.path)
+          }
+          guard Self.isRetryable(session.manifest.status) else { return false }
+          return
+            ((try? SessionRepository.completePCMFrameCount(
+              at: session.paths.mixedPCM,
+              repairTrailingByte: false
+            )) ?? 0) > 0
+        })
+      else { return }
+
+      if Self.isRetryable(recent.manifest.status) {
+        self.repository = repository
+        manifest = recent.manifest
+        paths = recent.paths
+        sessionDirectory = recent.paths.directory
+        state = .failed("Recording recovered. Transcription can be retried.")
+        return
+      }
+
+      self.repository = repository
+      manifest = recent.manifest
+      paths = recent.paths
+      sessionDirectory = recent.paths.directory
+      state = .completed
+    } catch {
+      Self.logger.error(
+        "Session recovery failed: \(error.localizedDescription, privacy: .public)"
+      )
+    }
+  }
+
+  private func retryCurrentTranscription() async {
+    guard let repository, var manifest, let paths else { return }
+    do {
+      let durationFrames = try SessionRepository.completePCMFrameCount(
+        at: paths.mixedPCM,
+        repairTrailingByte: true
+      )
+      guard durationFrames > 0 else { throw CoordinatorError.recordingUnavailable }
+      manifest.durationFrames = durationFrames
+      if manifest.status == .finalizing {
+        try manifest.transition(to: .interrupted)
+      }
+      self.manifest = manifest
+      beginProtectedActivity()
+      await finalizeSession(manifest, repository: repository, paths: paths)
+    } catch {
+      await handleFinalizationFailure(error)
+    }
+  }
+
+  private func finalizeSession(
+    _ sourceManifest: SessionManifest,
+    repository: SessionRepository,
+    paths: SessionPaths
+  ) async {
+    do {
+      var finalizing = sourceManifest
+      if finalizing.status != .finalizing {
+        try finalizing.transition(to: .finalizing)
+      }
+      finalizing.finalizationProgress = 0
+      finalizing.failure = nil
+      try await repository.save(finalizing, paths: paths)
+      manifest = finalizing
+      state = .finalizing(0)
+
+      try await loadWhisperModelIfNeeded()
+      let service = FinalTranscriptionService(engine: whisperEngine)
+      let transcript = try await service.transcribe(
+        pcmURL: paths.mixedPCM,
+        sessionID: finalizing.id,
+        durationFrames: finalizing.durationFrames
+      ) { [weak self] progress in
+        await self?.updateFinalizationProgress(progress)
+      }
+      try await TranscriptStore().write(transcript, paths: paths, title: finalizing.title)
+
+      var completed = self.manifest ?? finalizing
+      completed.finalizationProgress = 1
+      try completed.transition(to: .completed)
+      try await repository.save(completed, paths: paths)
+      manifest = completed
+      state = .completed
+      Self.logger.info("Final transcription completed")
+      endProtectedActivity()
+      clearActiveComponents()
+    } catch {
+      await handleFinalizationFailure(error)
+    }
+  }
+
+  private func loadWhisperModelIfNeeded() async throws {
+    if let modelLoadTask {
+      try await modelLoadTask.value
+      return
+    }
+    let manifestURL = try locateModelManifest()
+    let modelManifest = try ModelManager.loadManifest(from: manifestURL)
+    let task = Task { [whisperEngine] in
+      let modelDirectory = try Self.locateModelDirectory()
+      let manager = ModelManager(manifest: modelManifest)
+      let verified = try await manager.verifyDefaultModel(in: modelDirectory)
+      try await whisperEngine.loadModel(
+        at: verified.modelURL,
+        vadModelURL: verified.vadURL
+      )
+    }
+    modelLoadTask = task
+    try await task.value
+  }
+
+  private func updateMeter(_ snapshot: AudioMeterSnapshot) {
+    meter = snapshot
+    let now = Date()
+    if snapshot.system > 0.03 { lastSystemSignalAt = now }
+    if snapshot.microphone > 0.03 { lastMicrophoneSignalAt = now }
+  }
+
+  private func startRecordingMonitor() {
+    recordingMonitorTask?.cancel()
+    recordingMonitorTask = Task { [weak self] in
+      var elapsedSeconds = 0
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(1))
+        guard !Task.isCancelled, let self else { return }
+        elapsedSeconds += 1
+        self.updateSignalWarnings()
+        if elapsedSeconds.isMultiple(of: 10) {
+          await self.checkpointRecording()
+        }
+      }
+    }
+  }
+
+  private func updateSignalWarnings() {
+    guard case .recording = state else {
+      signalWarnings = []
+      return
+    }
+    let now = Date()
+    var warnings: [String] = []
+    if now.timeIntervalSince(lastMicrophoneSignalAt ?? now) >= 5 {
+      warnings.append("No microphone signal")
+    }
+    if now.timeIntervalSince(lastSystemSignalAt ?? now) >= 5 {
+      warnings.append("No system audio detected")
+    }
+    signalWarnings = warnings
+  }
+
+  private func checkpointRecording() async {
+    guard case .recording = state,
+      let audioPipeline,
+      let repository,
+      var manifest,
+      let paths
+    else { return }
+
+    manifest.durationFrames = await audioPipeline.currentWrittenFrames()
+    do {
+      try await repository.save(manifest, paths: paths)
+      self.manifest = manifest
+      switch try DiskSpacePolicy.status(for: paths.directory) {
+      case .critical:
+        storageNotice = "Recording stopped because less than 1 GB of disk space remains."
+        await interruptRecording(CoordinatorError.diskSpaceCritical, stopCapture: true)
+      case .warning(let availableBytes):
+        storageNotice =
+          "Low disk space: \(Self.formatByteCount(availableBytes)) available."
+      case .sufficient:
+        storageNotice = nil
+      }
+    } catch {
+      Self.logger.error(
+        "Recording checkpoint failed: \(error.localizedDescription, privacy: .public)"
+      )
+    }
+  }
+
   private func captureStopped(_ error: Error) {
     guard case .recording = state else { return }
     Self.logger.error("Capture stream stopped: \(error.localizedDescription, privacy: .public)")
-    Task { await interruptRecording(error) }
+    Task { await interruptRecording(error, stopCapture: false) }
   }
 
-  private func interruptRecording(_ error: Error) async {
+  private func interruptRecording(_ error: Error, stopCapture: Bool) async {
     guard let audioPipeline, let repository, var manifest, let paths else {
       state = .failed(error.localizedDescription)
       return
     }
+    recordingMonitorTask?.cancel()
+    recordingMonitorTask = nil
+    if stopCapture, let captureEngine { try? await captureEngine.stop() }
     let frames = (try? await audioPipeline.finish()) ?? manifest.durationFrames
     manifest.durationFrames = frames
     manifest.stoppedAt = Date()
@@ -451,26 +688,56 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func clearActiveComponents() {
+    recordingMonitorTask?.cancel()
+    recordingMonitorTask = nil
     captureEngine = nil
     audioPipeline = nil
     modelLoadTask = nil
     meter = AudioMeterSnapshot(system: 0, microphone: 0)
+    signalWarnings = []
+    lastSystemSignalAt = nil
+    lastMicrophoneSignalAt = nil
+  }
+
+  private static func isRetryable(_ status: SessionStatus) -> Bool {
+    switch status {
+    case .captured, .finalizing, .interrupted, .failed:
+      true
+    case .recording, .completed:
+      false
+    }
+  }
+
+  private static func formatByteCount(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
 }
 
-private enum CoordinatorError: Error, LocalizedError {
+private enum CoordinatorError: Error, LocalizedError, Sendable {
   case screenPermissionDenied
   case microphonePermissionDenied
   case modelUnavailable
+  case diskSpaceCritical
+  case recordingUnavailable
+  case systemSleep
+  case systemShutdown
 
   var errorDescription: String? {
     switch self {
     case .screenPermissionDenied:
       "Screen Recording permission is required to capture system audio."
     case .microphonePermissionDenied:
-      "Microphone permission is required for the Phase 0 two-source test."
+      "Microphone permission is required to record your side of the meeting."
     case .modelUnavailable:
       "The verified local transcription model is unavailable."
+    case .diskSpaceCritical:
+      "At least 1 GB of free disk space is required to record."
+    case .recordingUnavailable:
+      "The recovered recording does not contain usable audio."
+    case .systemSleep:
+      "The Mac went to sleep."
+    case .systemShutdown:
+      "The Mac is logging out or shutting down."
     }
   }
 }

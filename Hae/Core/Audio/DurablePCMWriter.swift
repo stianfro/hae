@@ -70,4 +70,12 @@ public final class DurablePCMWriter: @unchecked Sendable {
       }
     }
   }
+
+  public func currentFrameCount() async -> Int64 {
+    await withCheckedContinuation { continuation in
+      queue.async { [self] in
+        continuation.resume(returning: writtenFrames)
+      }
+    }
+  }
 }

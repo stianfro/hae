@@ -20,6 +20,18 @@ func deduplicationPreservesNonOverlappingText() {
 }
 
 @Test
+func removesWhisperControlTokens() {
+  #expect(
+    TranscriptDeduplicator.removingWhisperControlTokens(
+      from: "  <|startoftranscript|><|no|> Dette virker. <|nocaptions|>  "
+    ) == "Dette virker."
+  )
+  #expect(
+    TranscriptDeduplicator.removingWhisperControlTokens(from: "<|nocaptions|>").isEmpty
+  )
+}
+
+@Test
 func srtTimestampFormatting() {
   #expect(TranscriptStore.srtTimestamp(milliseconds: 3_723_045) == "01:02:03,045")
   #expect(TranscriptStore.srtTimestamp(milliseconds: -1) == "00:00:00,000")

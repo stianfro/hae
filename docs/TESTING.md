@@ -11,7 +11,8 @@ just ci
 The unit suite covers model hashing, PCM conversion, sample-rate conversion,
 mono downmix, audio levels, out-of-order timeline input, missing-source silence,
 mixer gain and limiting, manifest transitions, atomic replacement, partial PCM
-recovery, overlap deduplication, and SRT timestamps.
+recovery, finalization recovery, disk thresholds, Whisper control-token
+filtering, overlap deduplication, and SRT timestamps.
 
 Run the offline runtime smoke test after fetching the models:
 
@@ -58,6 +59,14 @@ Use an Apple Silicon Mac running macOS 15 or later.
 
 Do not mark Phase 0 passed until this evidence is recorded for the target Mac.
 
+### Capture evidence
+
+On 2026-08-14, the target Mac captured a Norwegian YouTube video as system
+audio while the user spoke into the selected microphone. The user confirmed
+that speech from both sources appeared in the resulting transcript. This
+confirms the two-source capture, mixing, and final transcription path. The
+60-second Teams test and minimized-window repeat above remain release checks.
+
 ## Failure checks
 
 - Rename one local model and confirm recording still starts, stops, and keeps
@@ -65,4 +74,11 @@ Do not mark Phase 0 passed until this evidence is recorded for the target Mac.
 - Replace a model with a small file and confirm checksum validation rejects it.
 - Quit during recording and confirm the raw PCM file remains readable up to its
   complete 16-bit frame boundary.
+- Relaunch after interrupting recording and confirm **Retry transcription** is
+  available, completes without a separate recovery command, and recreates all
+  four transcript exports.
+- Quit during finalization, relaunch, retry, and confirm the resulting exports
+  contain no `<|nocaptions|>` or other Whisper control tokens.
+- Confirm recording is refused below 1 GB free and warns below 3 GB free using
+  an isolated test volume. Do not fill the system volume to test this.
 - Disable network access and repeat the complete workflow.

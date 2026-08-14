@@ -103,6 +103,10 @@ public final class AudioPipeline: @unchecked Sendable {
     return try await writer.finish()
   }
 
+  public func currentWrittenFrames() async -> Int64 {
+    await writer.currentFrameCount()
+  }
+
   private func accept(_ buffer: ConvertedBuffer) {
     meterLevels[buffer.source] = AudioLevelMeter.normalizedLevel(samples: buffer.samples)
     publishMeterIfNeeded()

@@ -1,6 +1,17 @@
 import Foundation
 
 public enum TranscriptDeduplicator {
+  public static func removingWhisperControlTokens(from text: String) -> String {
+    text
+      .replacingOccurrences(
+        of: #"<\|[^|>\r\n]+\|>"#,
+        with: "",
+        options: .regularExpression
+      )
+      .split(whereSeparator: \.isWhitespace)
+      .joined(separator: " ")
+  }
+
   public static func removingOverlap(
     previousText: String,
     newText: String,

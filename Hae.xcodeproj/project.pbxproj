@@ -25,6 +25,7 @@
 		1DA5C2E87F27BF64FFB41A1D /* AtomicFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */; };
 		6DBDE4CBF6F2B7DA453F4011 /* SessionManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E241F9CD02A442027D56797 /* SessionManifest.swift */; };
 		AB1F517592070552DC9E13D2 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */; };
+		7A16B90FD84449EB9C076D63 /* StoragePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83788320212D4441ACDCBD92 /* StoragePolicy.swift */; };
 		4B1D1AB2D6BF8B68E2A91A8D /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */; };
 		4A00A4F2F6234DE099CE30D6 /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C7AFD4D5228A120D160287 /* TranscriptStore.swift */; };
 		0EF9238BF14823FE82C930F0 /* FinalTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */; };
@@ -72,6 +73,7 @@
 		7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/AtomicFileWriter.swift; sourceTree = SOURCE_ROOT; };
 		6E241F9CD02A442027D56797 /* SessionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/SessionManifest.swift; sourceTree = SOURCE_ROOT; };
 		9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/SessionRepository.swift; sourceTree = SOURCE_ROOT; };
+		83788320212D4441ACDCBD92 /* StoragePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/StoragePolicy.swift; sourceTree = SOURCE_ROOT; };
 		257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/Transcript.swift; sourceTree = SOURCE_ROOT; };
 		70C7AFD4D5228A120D160287 /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/TranscriptStore.swift; sourceTree = SOURCE_ROOT; };
 		AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/FinalTranscriptionService.swift; sourceTree = SOURCE_ROOT; };
@@ -113,6 +115,7 @@
 				7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */,
 				6E241F9CD02A442027D56797 /* SessionManifest.swift */,
 				9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */,
+				83788320212D4441ACDCBD92 /* StoragePolicy.swift */,
 				257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */,
 				70C7AFD4D5228A120D160287 /* TranscriptStore.swift */,
 				AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */,
@@ -166,6 +169,7 @@
 				1DA5C2E87F27BF64FFB41A1D /* AtomicFileWriter.swift in Sources */,
 				6DBDE4CBF6F2B7DA453F4011 /* SessionManifest.swift in Sources */,
 				AB1F517592070552DC9E13D2 /* SessionRepository.swift in Sources */,
+				7A16B90FD84449EB9C076D63 /* StoragePolicy.swift in Sources */,
 				4B1D1AB2D6BF8B68E2A91A8D /* Transcript.swift in Sources */,
 				4A00A4F2F6234DE099CE30D6 /* TranscriptStore.swift in Sources */,
 				0EF9238BF14823FE82C930F0 /* FinalTranscriptionService.swift in Sources */,

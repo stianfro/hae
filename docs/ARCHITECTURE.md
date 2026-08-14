@@ -1,6 +1,6 @@
 # Architecture
 
-## Phase 0 data flow
+## Current data flow
 
 ```mermaid
 flowchart LR
@@ -27,6 +27,11 @@ bounded chunks. The storage queue appends signed 16-bit little-endian samples.
 The writer queue is independent from the Whisper actor. A missing model or an
 inference error can fail transcription, but cannot stop or delete recording.
 
+The coordinator checkpoints the complete frame count in the session manifest
+every 10 seconds. It also checks disk space at the same interval. Recording is
+refused below 1 GB free, warns below 3 GB free, and closes as an interrupted
+session if available space falls below 1 GB while recording.
+
 ## Timeline behavior
 
 Each source keeps a sorted, bounded timeline. Mixing advances only to the
@@ -42,17 +47,37 @@ overlap. The Whisper context is owned by one Swift actor. Overlap text is
 deduplicated by bounded suffix and prefix token comparison. Transcript output is
 written through temporary files followed by atomic replacement.
 
+Whisper control tokens such as `<|nocaptions|>` are removed before transcript
+segments are stored.
+
+## Recovery and retry
+
+At launch, the session repository scans local session directories. A manifest
+left in `recording` is changed to `interrupted`, and its frame count is rebuilt
+from the durable PCM file. An incomplete trailing Int16 byte is removed. A
+manifest left in `finalizing` is also changed to `interrupted`. Captured,
+interrupted, and failed sessions with usable audio can be transcribed again
+from the menu. Retry recreates all transcript exports atomically from the mixed
+PCM source.
+
+Sleep, logout, ScreenCaptureKit failure, and critical disk space close the
+audio pipeline and preserve the session as interrupted when the process has
+time to handle the notification. The launch scanner remains the fallback when
+the process is terminated before cleanup completes.
+
 ## Recorded deviations and deferred work
 
-- This repository implements Phase 0 only. Recovery UI, history, retention,
-  login items, notifications, CAF export, separate source retention, and live
-  draft transcription remain deferred to their ordered phases.
+- The Phase 0 capture and transcription path and the main Phase 1 durability
+  work are implemented. History, retention, login items, notifications, CAF
+  export, separate source retention, display selection, and live draft
+  transcription remain deferred to their ordered phases.
 - The initial capture registers only `.audio` and `.microphone`. The low-rate
   discarded screen-output compatibility mode is deferred until the manual
   audio-only test proves it is needed.
 - Phase 0 requires both permissions. The later explicit system-audio-only flow
   for denied microphone access is not part of this spike.
-- Final chunks use whisper.cpp VAD and bounded PCM reads. Full restart recovery
-  and idempotent retry UI remain deferred, while all failed audio is preserved.
+- Final chunks use whisper.cpp VAD and bounded PCM reads. Launch recovery and
+  idempotent retry are implemented, while incremental transcript checkpoints
+  during final inference remain deferred.
 - The upstream official XCFramework script emits several Apple platform slices.
   The Hae application target itself is restricted to arm64.

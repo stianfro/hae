@@ -38,6 +38,61 @@ func repositoryRoundTrip() async throws {
 }
 
 @Test
+func diskSpacePolicyUsesRequiredThresholds() {
+  #expect(
+    DiskSpacePolicy.status(availableBytes: 999_999_999) == .critical(availableBytes: 999_999_999))
+  #expect(
+    DiskSpacePolicy.status(availableBytes: 1_000_000_000) == .warning(availableBytes: 1_000_000_000)
+  )
+  #expect(
+    DiskSpacePolicy.status(availableBytes: 2_999_999_999) == .warning(availableBytes: 2_999_999_999)
+  )
+  #expect(
+    DiskSpacePolicy.status(availableBytes: 3_000_000_000)
+      == .sufficient(availableBytes: 3_000_000_000))
+}
+
+@Test
+func recoveryRepairsPartialRecording() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let repository = SessionRepository(sessionsDirectory: directory)
+  let (_, paths) = try await repository.createSession(model: makeDescriptor())
+  try Data([0, 1, 2, 3, 4]).write(to: paths.mixedPCM)
+  let recoveryDate = Date(timeIntervalSince1970: 1_800_000_000)
+
+  let sessions = try await repository.recoverSessions(now: recoveryDate)
+
+  #expect(sessions.count == 1)
+  #expect(sessions[0].manifest.status == .interrupted)
+  #expect(sessions[0].manifest.durationFrames == 2)
+  #expect(sessions[0].manifest.stoppedAt == recoveryDate)
+  #expect(sessions[0].manifest.failure?.stage == "recovery")
+  #expect(
+    try FileManager.default.attributesOfItem(atPath: paths.mixedPCM.path)[.size] as? NSNumber
+      == NSNumber(value: 4)
+  )
+}
+
+@Test
+func recoveryMakesInterruptedFinalizationRetryable() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let repository = SessionRepository(sessionsDirectory: directory)
+  var (manifest, paths) = try await repository.createSession(model: makeDescriptor())
+  try Data([0, 1, 2, 3]).write(to: paths.mixedPCM)
+  try manifest.transition(to: .captured)
+  try manifest.transition(to: .finalizing)
+  try await repository.save(manifest, paths: paths)
+
+  let sessions = try await repository.recoverSessions()
+
+  #expect(sessions[0].manifest.status == .interrupted)
+  #expect(sessions[0].manifest.durationFrames == 2)
+  #expect(sessions[0].manifest.failure?.stage == "recovery")
+}
+
+@Test
 func transcriptStoreWritesCopyReadyPlainText() async throws {
   let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: directory) }

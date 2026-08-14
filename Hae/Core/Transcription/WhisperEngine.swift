@@ -108,8 +108,9 @@ public actor WhisperEngine {
       guard result == 0 else { throw WhisperEngineError.inferenceFailed(result) }
 
       return (0..<whisper_full_n_segments(context.pointer)).compactMap { index in
-        let text = String(cString: whisper_full_get_segment_text(context.pointer, index))
-          .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = TranscriptDeduplicator.removingWhisperControlTokens(
+          from: String(cString: whisper_full_get_segment_text(context.pointer, index))
+        )
         guard !text.isEmpty else { return nil }
         return TranscriptSegment(
           startMs: Int(whisper_full_get_segment_t0(context.pointer, index)) * 10,

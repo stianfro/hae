@@ -53,6 +53,19 @@ struct MenuBarView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
 
+      if let storageNotice = coordinator.storageNotice {
+        Label(storageNotice, systemImage: "externaldrive.badge.exclamationmark")
+          .font(.caption)
+          .foregroundStyle(.orange)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      ForEach(coordinator.signalWarnings, id: \.self) { warning in
+        Label(warning, systemImage: "waveform.slash")
+          .font(.caption)
+          .foregroundStyle(.orange)
+      }
+
       Button(action: coordinator.toggleRecording) {
         Label(buttonTitle, systemImage: buttonIcon)
           .frame(maxWidth: .infinity)
@@ -60,6 +73,14 @@ struct MenuBarView: View {
       .buttonStyle(.borderedProminent)
       .controlSize(.large)
       .disabled(buttonDisabled)
+
+      if coordinator.canRetryTranscription {
+        Button(action: coordinator.retryTranscription) {
+          Label("Retry transcription", systemImage: "arrow.clockwise")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+      }
 
       if coordinator.hasCompletedTranscript {
         VStack(alignment: .leading, spacing: 8) {

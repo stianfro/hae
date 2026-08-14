@@ -11,6 +11,16 @@ public struct SessionPaths: Equatable, Sendable {
   public var transcriptSRT: URL { directory.appendingPathComponent("transcript.srt") }
 }
 
+public struct StoredSession: Equatable, Sendable {
+  public let manifest: SessionManifest
+  public let paths: SessionPaths
+
+  public init(manifest: SessionManifest, paths: SessionPaths) {
+    self.manifest = manifest
+    self.paths = paths
+  }
+}
+
 public actor SessionRepository {
   private let sessionsDirectory: URL
   private let encoder: JSONEncoder
@@ -29,7 +39,9 @@ public actor SessionRepository {
       appropriateFor: nil,
       create: true
     )
-    return support.appendingPathComponent("Hae/Sessions", isDirectory: true)
+    let sessions = support.appendingPathComponent("Hae/Sessions", isDirectory: true)
+    try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+    return sessions
   }
 
   public func createSession(model: WhisperModelDescriptor, now: Date = Date()) throws
@@ -63,6 +75,81 @@ public actor SessionRepository {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return try decoder.decode(SessionManifest.self, from: Data(contentsOf: paths.manifest))
+  }
+
+  public func recoverSessions(now: Date = Date()) throws -> [StoredSession] {
+    try FileManager.default.createDirectory(
+      at: sessionsDirectory,
+      withIntermediateDirectories: true
+    )
+    let properties: Set<URLResourceKey> = [.isDirectoryKey]
+    let directories = try FileManager.default.contentsOfDirectory(
+      at: sessionsDirectory,
+      includingPropertiesForKeys: Array(properties),
+      options: [.skipsHiddenFiles]
+    )
+
+    var sessions: [StoredSession] = []
+    for directory in directories {
+      guard
+        (try? directory.resourceValues(forKeys: properties).isDirectory) == true
+      else { continue }
+
+      let paths = SessionPaths(directory: directory)
+      guard var manifest = try? load(paths: paths) else { continue }
+      let frameCount = try Self.completePCMFrameCount(at: paths.mixedPCM, repairTrailingByte: true)
+
+      switch manifest.status {
+      case .recording:
+        manifest.durationFrames = frameCount
+        manifest.stoppedAt = now
+        manifest.failure = SessionFailure(
+          stage: "recovery",
+          message: "The application stopped before the recording was closed."
+        )
+        try manifest.transition(to: .interrupted)
+        try save(manifest, paths: paths)
+      case .finalizing:
+        manifest.durationFrames = frameCount
+        manifest.failure = SessionFailure(
+          stage: "recovery",
+          message: "The application stopped before transcription completed."
+        )
+        try manifest.transition(to: .interrupted)
+        try save(manifest, paths: paths)
+      case .captured, .interrupted, .failed:
+        if frameCount > 0, manifest.durationFrames != frameCount {
+          manifest.durationFrames = frameCount
+          try save(manifest, paths: paths)
+        }
+      case .completed:
+        break
+      }
+      sessions.append(StoredSession(manifest: manifest, paths: paths))
+    }
+
+    return sessions.sorted { left, right in
+      left.manifest.createdAt > right.manifest.createdAt
+    }
+  }
+
+  public static func completePCMFrameCount(
+    at url: URL,
+    repairTrailingByte: Bool
+  ) throws -> Int64 {
+    guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    guard let fileSize = attributes[.size] as? NSNumber else {
+      throw CocoaError(.fileReadUnknown)
+    }
+    let byteCount = fileSize.int64Value
+    let completeByteCount = byteCount - byteCount % Int64(MemoryLayout<Int16>.size)
+    if repairTrailingByte, completeByteCount != byteCount {
+      let handle = try FileHandle(forWritingTo: url)
+      try handle.truncate(atOffset: UInt64(completeByteCount))
+      try handle.close()
+    }
+    return completeByteCount / Int64(MemoryLayout<Int16>.size)
   }
 
   private static func defaultTitle(date: Date) -> String {
