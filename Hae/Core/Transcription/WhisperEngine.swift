@@ -2,6 +2,18 @@ import Foundation
 
 #if canImport(whisper)
   import whisper
+
+  private final class WhisperContext: @unchecked Sendable {
+    let pointer: OpaquePointer
+
+    init(_ pointer: OpaquePointer) {
+      self.pointer = pointer
+    }
+
+    deinit {
+      whisper_free(pointer)
+    }
+  }
 #endif
 
 public enum WhisperEngineError: Error, LocalizedError, Sendable {
@@ -26,21 +38,14 @@ public enum WhisperEngineError: Error, LocalizedError, Sendable {
 
 public actor WhisperEngine {
   #if canImport(whisper)
-    private var context: OpaquePointer?
+    private var context: WhisperContext?
   #endif
   private var vadModelURL: URL?
 
   public init() {}
 
-  deinit {
-    #if canImport(whisper)
-      if let context { whisper_free(context) }
-    #endif
-  }
-
   public func loadModel(at modelURL: URL, vadModelURL: URL) throws {
     #if canImport(whisper)
-      if let currentContext = context { whisper_free(currentContext) }
       context = nil
       self.vadModelURL = nil
       var parameters = whisper_context_default_params()
@@ -49,7 +54,7 @@ public actor WhisperEngine {
       guard let loaded = whisper_init_from_file_with_params(modelURL.path, parameters) else {
         throw WhisperEngineError.modelLoadFailed
       }
-      context = loaded
+      context = WhisperContext(loaded)
       self.vadModelURL = vadModelURL
     #else
       throw WhisperEngineError.runtimeUnavailable
@@ -58,7 +63,6 @@ public actor WhisperEngine {
 
   public func unload() {
     #if canImport(whisper)
-      if let context { whisper_free(context) }
       context = nil
     #endif
     vadModelURL = nil
@@ -96,19 +100,20 @@ public actor WhisperEngine {
           whisperParameters.language = language
           whisperParameters.vad_model_path = vadPath
           return samples.withUnsafeBufferPointer { pointer in
-            whisper_full(context, whisperParameters, pointer.baseAddress, Int32(pointer.count))
+            whisper_full(
+              context.pointer, whisperParameters, pointer.baseAddress, Int32(pointer.count))
           }
         }
       }
       guard result == 0 else { throw WhisperEngineError.inferenceFailed(result) }
 
-      return (0..<whisper_full_n_segments(context)).compactMap { index in
-        let text = String(cString: whisper_full_get_segment_text(context, index))
+      return (0..<whisper_full_n_segments(context.pointer)).compactMap { index in
+        let text = String(cString: whisper_full_get_segment_text(context.pointer, index))
           .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         return TranscriptSegment(
-          startMs: Int(whisper_full_get_segment_t0(context, index)) * 10,
-          endMs: Int(whisper_full_get_segment_t1(context, index)) * 10,
+          startMs: Int(whisper_full_get_segment_t0(context.pointer, index)) * 10,
+          endMs: Int(whisper_full_get_segment_t1(context.pointer, index)) * 10,
           text: text
         )
       }

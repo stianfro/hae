@@ -159,6 +159,7 @@ fi
 
 "${swift_compiler[@]}" \
     -parse-as-library \
+    -swift-version 6 \
     -target arm64-apple-macos15.0 \
     -sdk "$sdk" \
     -module-cache-path "$swift_module_cache" \
