@@ -36,10 +36,12 @@ Use an Apple Silicon Mac running macOS 15 or later.
    press **Start recording**.
 5. Grant Screen Recording and microphone permissions when asked. Restart the
    development build if macOS requires it.
-6. Speak locally and ask the remote participant to speak. Confirm both meters
-   leave the silent state.
+6. Confirm a red dot appears on the Hæ? menu-bar icon. Speak locally and ask
+   the remote participant to speak, then confirm both meters leave the silent
+   state.
 7. Keep the call active for at least 60 seconds, then press **Stop recording**.
-8. Wait for automatic final transcription. Do not invoke a separate command.
+8. Confirm the red dot disappears, then wait for automatic final transcription.
+   Do not invoke a separate command.
 9. Press **Copy transcript**, paste into a temporary text field, and confirm it
    matches `transcript.txt`.
 10. Press **Open .txt** and confirm `transcript.txt` opens in the default editor.
