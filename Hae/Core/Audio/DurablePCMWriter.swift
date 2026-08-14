@@ -56,16 +56,24 @@ public final class DurablePCMWriter: @unchecked Sendable {
           continuation.resume(throwing: DurablePCMWriterError.alreadyFinished)
           return
         }
+        var failure = storedError
         do {
-          if let storedError { throw storedError }
           try handle.synchronize()
-          try handle.close()
-          isFinished = true
-          continuation.resume(returning: writtenFrames)
         } catch {
+          if failure == nil { failure = error }
+        }
+        do {
+          try handle.close()
+        } catch {
+          if failure == nil { failure = error }
+        }
+        isFinished = true
+        if let failure {
           continuation.resume(
-            throwing: DurablePCMWriterError.writeFailed(error.localizedDescription)
+            throwing: DurablePCMWriterError.writeFailed(failure.localizedDescription)
           )
+        } else {
+          continuation.resume(returning: writtenFrames)
         }
       }
     }
@@ -77,5 +85,9 @@ public final class DurablePCMWriter: @unchecked Sendable {
         continuation.resume(returning: writtenFrames)
       }
     }
+  }
+
+  deinit {
+    try? handle.close()
   }
 }

@@ -1,0 +1,18 @@
+# frozen_string_literal: true
+
+cask "hae" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
+
+  url "https://github.com/stianfro/hae/releases/download/v#{version}/Hae-#{version}-arm64.zip"
+  name "Hæ?"
+  desc "Local meeting recorder and transcription app"
+  homepage "https://github.com/stianfro/hae"
+
+  depends_on arch: :arm64
+  depends_on macos: ">= :sequoia"
+
+  app "Hae.app"
+
+  zap trash: "~/Library/Containers/no.froystein.hae"
+end

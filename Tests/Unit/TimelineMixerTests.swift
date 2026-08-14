@@ -58,3 +58,16 @@ func mixerFlushesOneSourceWithSilenceForTheOther() throws {
   #expect(abs(chunk[0] - 0.2) < 0.0001)
   #expect(abs(chunk[1] - 0.3) < 0.0001)
 }
+
+@Test
+func timelineDiscardsProcessedBuffersDuringLongInput() {
+  var timeline = AudioTimeline()
+  for frame in 0..<20_000 {
+    timeline.insert(
+      TimedAudioBuffer(source: .system, startFrame: Int64(frame), samples: [0.1])
+    )
+    _ = timeline.read(startFrame: Int64(frame), count: 1)
+    timeline.discard(before: Int64(frame + 1))
+    #expect(timeline.buffers.isEmpty)
+  }
+}

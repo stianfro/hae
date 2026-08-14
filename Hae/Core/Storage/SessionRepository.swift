@@ -183,10 +183,16 @@ public actor SessionRepository {
     let baseName = Self.safeExportName(manifest.title, fallback: manifest.id.uuidString)
     var exportDirectory = destinationDirectory.appendingPathComponent(baseName, isDirectory: true)
     if FileManager.default.fileExists(atPath: exportDirectory.path) {
-      exportDirectory = destinationDirectory.appendingPathComponent(
-        "\(baseName)-\(manifest.id.uuidString.prefix(8))",
-        isDirectory: true
-      )
+      let suffixedName = "\(baseName)-\(manifest.id.uuidString.prefix(8))"
+      exportDirectory = destinationDirectory.appendingPathComponent(suffixedName, isDirectory: true)
+      var counter = 2
+      while FileManager.default.fileExists(atPath: exportDirectory.path) {
+        exportDirectory = destinationDirectory.appendingPathComponent(
+          "\(suffixedName)-\(counter)",
+          isDirectory: true
+        )
+        counter += 1
+      }
     }
     try FileManager.default.createDirectory(
       at: exportDirectory,

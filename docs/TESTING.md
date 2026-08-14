@@ -12,7 +12,8 @@ The unit suite covers model hashing, PCM conversion, sample-rate conversion,
 mono downmix, audio levels, out-of-order timeline input, missing-source silence,
 mixer gain and limiting, manifest transitions, atomic replacement, partial PCM
 recovery, finalization recovery, disk thresholds, Whisper control-token
-filtering, overlap deduplication, and SRT timestamps.
+filtering, overlap deduplication, source-track alignment, display fallback,
+retention calculation, session management, export, and SRT timestamps.
 
 Run the offline runtime smoke test after fetching the models:
 
@@ -82,3 +83,18 @@ confirms the two-source capture, mixing, and final transcription path. The
 - Confirm recording is refused below 1 GB free and warns below 3 GB free using
   an isolated test volume. Do not fill the system volume to test this.
 - Disable network access and repeat the complete workflow.
+
+## History and retention checks
+
+- Relaunch and confirm completed and interrupted sessions appear in newest-first
+  order.
+- Rename a completed session and confirm the manifest and Markdown heading both
+  use the new title.
+- Export a session and confirm JSON, Markdown, text, and SRT are copied.
+- Delete retained audio and confirm transcript exports remain available.
+- Delete a session and confirm its session directory is removed.
+- Set retention to immediate, seven days, thirty days, and indefinitely, then
+  confirm only completed audio past the selected threshold is removed.
+- Enable separate source tracks and confirm both files match the mixed file's
+  duration and timeline.
+- Select each connected display and confirm system audio remains captured.

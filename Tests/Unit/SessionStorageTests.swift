@@ -130,6 +130,9 @@ func repositoryRenamesAndDeletesSessions() async throws {
   let repository = SessionRepository(sessionsDirectory: directory)
   let (_, paths) = try await repository.createSession(model: makeDescriptor())
   try Data([0, 1]).write(to: paths.mixedPCM)
+  try Data([0, 1]).write(to: paths.systemPCM)
+  try Data([0, 1]).write(to: paths.microphonePCM)
+  try Data([0, 1]).write(to: paths.mixedCAF)
 
   let renamed = try await repository.renameSession(paths: paths, title: "  Weekly sync  ")
   #expect(renamed.title == "Weekly sync")
@@ -139,6 +142,9 @@ func repositoryRenamesAndDeletesSessions() async throws {
 
   try await repository.deleteAudio(paths: paths)
   #expect(!FileManager.default.fileExists(atPath: paths.mixedPCM.path))
+  #expect(!FileManager.default.fileExists(atPath: paths.systemPCM.path))
+  #expect(!FileManager.default.fileExists(atPath: paths.microphonePCM.path))
+  #expect(!FileManager.default.fileExists(atPath: paths.mixedCAF.path))
   #expect(FileManager.default.fileExists(atPath: paths.manifest.path))
 
   try await repository.deleteSession(paths: paths)
@@ -174,6 +180,26 @@ func repositoryExportsTranscriptFormats() async throws {
     FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.txt").path))
   #expect(
     FileManager.default.fileExists(atPath: exported.appendingPathComponent("transcript.srt").path))
+
+  let secondExport = try await repository.exportTranscripts(paths: paths, to: destination)
+  #expect(secondExport != exported)
+  #expect(secondExport.lastPathComponent.hasPrefix("Test-export-"))
+  let thirdExport = try await repository.exportTranscripts(paths: paths, to: destination)
+  #expect(thirdExport.lastPathComponent.hasSuffix("-2"))
+}
+
+@Test
+func repositoryRejectsPathsOutsideSessionRoot() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let repository = SessionRepository(sessionsDirectory: directory)
+  let outside = SessionPaths(
+    directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  )
+
+  await #expect(throws: SessionRepositoryError.sessionOutsideRepository) {
+    try await repository.deleteSession(paths: outside)
+  }
 }
 
 @Test

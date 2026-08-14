@@ -171,6 +171,7 @@ fi
     -Xlinker "$build/bin" \
     "$root/Hae/Core/Storage/Transcript.swift" \
     "$root/Hae/Core/Transcription/PCMFileReader.swift" \
+    "$root/Hae/Core/Transcription/TranscriptDeduplicator.swift" \
     "$root/Hae/Core/Transcription/WhisperEngine.swift" \
     "$root/Hae/Core/Transcription/WhisperParameters.swift" \
     "$swift_runner" \

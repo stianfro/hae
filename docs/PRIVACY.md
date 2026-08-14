@@ -14,6 +14,9 @@ network code and no network client or server entitlement.
   titles, or names inferred from speech.
 - Audio is stored as append-only raw PCM before transcription starts.
 - A transcription failure preserves the recording and manifest.
+- Completion notifications are local and contain only the user-visible session
+  title. They can be disabled in Settings.
+- Transcript export requires a user-selected destination.
 
 ## Entitlements
 
@@ -22,7 +25,8 @@ include `com.apple.security.network.client` or
 `com.apple.security.network.server`. `Scripts/package-release.sh` signs the
 packaged app with `Hae/Hae.entitlements` after verified models are copied into
 the bundle. Packaging rechecks the bundled model hashes and rejects signed
-entitlements containing network client or server access.
+entitlements containing network client or server access. Public packaging also
+requires Developer ID signing, hardened runtime, notarization, and stapling.
 
 Deleting application files is not secure erasure on APFS or SSD media. FileVault
 should be enabled when recordings need protection at rest.

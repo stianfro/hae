@@ -38,6 +38,7 @@
 		4C8B7EB0F1DCCE1E6760E4F2 /* ModelManifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */; };
 		43D2DAC384E0114FAD5C9D03 /* ThirdPartyNotices.md in Resources */ = {isa = PBXBuildFile; fileRef = 016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */; };
 		BF3515B1579247384CB8869E /* WhisperBuild.json in Resources */ = {isa = PBXBuildFile; fileRef = 1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */; };
+		2BE331E34ADC40DFA936460D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 246377177BFA43759ECF74BC /* Assets.xcassets */; };
 		B915CA71969329371729287C /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45AD4CC962476B5EB34F853D /* whisper.xcframework */; };
 		1D08C3839F75B3DE88717C7F /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 45AD4CC962476B5EB34F853D /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -87,6 +88,7 @@
 		CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Hae/Core/Models/ModelManifest.json; sourceTree = SOURCE_ROOT; };
 		016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Hae/Resources/ThirdPartyNotices.md; sourceTree = SOURCE_ROOT; };
 		1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Hae/Resources/WhisperBuild.json; sourceTree = SOURCE_ROOT; };
+		246377177BFA43759ECF74BC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Hae/Resources/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		45AD4CC962476B5EB34F853D /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Frameworks/whisper.xcframework; sourceTree = SOURCE_ROOT; };
 		D957E19B16B69713B7749A90 /* Hae.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Hae.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -130,6 +132,7 @@
 				CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */,
 				016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */,
 				1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */,
+				246377177BFA43759ECF74BC /* Assets.xcassets */,
 			); name = Hae; sourceTree = "<group>"; };
 		B906EB298B3478841B2D660B /* Frameworks */ = {isa = PBXGroup; children = (45AD4CC962476B5EB34F853D /* whisper.xcframework */, ); name = Frameworks; sourceTree = "<group>"; };
 		7168E62E5CDB0DF79ADF5742 /* Products */ = {isa = PBXGroup; children = (D957E19B16B69713B7749A90 /* Hae.app */, ); name = Products; sourceTree = "<group>"; };
@@ -148,6 +151,7 @@
 				4C8B7EB0F1DCCE1E6760E4F2 /* ModelManifest.json in Resources */,
 				43D2DAC384E0114FAD5C9D03 /* ThirdPartyNotices.md in Resources */,
 				BF3515B1579247384CB8869E /* WhisperBuild.json in Resources */,
+				2BE331E34ADC40DFA936460D /* Assets.xcassets in Resources */,
 			); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
@@ -188,8 +192,8 @@
 /* Begin XCBuildConfiguration section */
 		D12546C7310DEE778E55E187 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Debug; };
 		AA23A758EC6A71B7321371F8 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Release; };
-		E1698793B8B09B32821D3120 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
-		FFACE85B9B63AB569355131D /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEAD_CODE_STRIPPING = YES; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
+		E1698793B8B09B32821D3120 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+		FFACE85B9B63AB569355131D /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEAD_CODE_STRIPPING = YES; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */

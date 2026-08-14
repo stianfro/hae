@@ -12,6 +12,7 @@ flowchart LR
     Microphone --> Pipeline
     Pipeline --> Converter["Per-source AVAudioConverter"]
     Converter --> Mixer["PTS timeline mixer"]
+    Converter --> SourceTracks["Optional aligned source tracks"]
     Mixer --> PCM["Append-only PCM writer"]
     PCM --> Final["Bounded final transcription"]
     Final --> Whisper["WhisperEngine actor"]
@@ -65,17 +66,34 @@ audio pipeline and preserve the session as interrupted when the process has
 time to handle the notification. The launch scanner remains the fallback when
 the process is terminated before cleanup completes.
 
+## History and settings
+
+The repository is the source of truth for session history. There is no separate
+index that can drift from the manifests. History supports opening, revealing,
+renaming, exporting, deleting retained audio, deleting a session, and retrying
+transcription. Renaming a completed session recreates the export files so the
+Markdown title stays consistent.
+
+Audio retention defaults to seven days and is applied only to completed
+sessions. It never removes transcripts or audio needed for retry. Optional
+system and microphone source tracks share the mixed recording timeline and are
+covered by the same retention action.
+
+Microphone, capture display, source gains, source-track retention, launch at
+login, completion notification, and idle-sleep settings are persisted locally.
+
 ## Recorded deviations and deferred work
 
-- The Phase 0 capture and transcription path and the main Phase 1 durability
-  work are implemented. History, retention, login items, notifications, CAF
-  export, separate source retention, display selection, and live draft
-  transcription remain deferred to their ordered phases.
+- The durable recorder, automatic final transcription, recovery, history,
+  retention, export, login item, notification, source-track, and display
+  selection work is implemented. CAF conversion and live draft transcription
+  remain deferred.
 - The initial capture registers only `.audio` and `.microphone`. The low-rate
   discarded screen-output compatibility mode is deferred until the manual
   audio-only test proves it is needed.
-- Phase 0 requires both permissions. The later explicit system-audio-only flow
-  for denied microphone access is not part of this spike.
+- Recording currently requires both permissions. The explicit
+  system-audio-only confirmation flow for denied microphone access remains
+  deferred.
 - Final chunks use whisper.cpp VAD and bounded PCM reads. Launch recovery and
   idempotent retry are implemented, while incremental transcript checkpoints
   during final inference remain deferred.
