@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+.cache/
+DerivedData/
+Frameworks/whisper.xcframework/
+LocalModels/*
+!LocalModels/.gitkeep
+Vendor/whisper.cpp/build-*/
+*.xcuserstate
+xcuserdata/

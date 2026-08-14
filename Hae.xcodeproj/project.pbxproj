@@ -1,0 +1,193 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		15CC848F7337765982AA1FC0 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63560B5A635E68BB45023041 /* AppCoordinator.swift */; };
+		156A56D8CC793D83E78EC543 /* HaeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA2B33C5BFBA8796916FBC5E /* HaeApp.swift */; };
+		D3C2156EB7529104A5490854 /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF2BD9D8FB70C984DEEDFA1 /* AudioLevelMeter.swift */; };
+		1CBCFB22761A5FE77E4444D4 /* AudioPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE918524EFA5711555D2EF59 /* AudioPipeline.swift */; };
+		FC6812C04AE2281E87307111 /* DurablePCMWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E6166839C05B5795254A56 /* DurablePCMWriter.swift */; };
+		41FE8D860B4537E8046B1010 /* PCMConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FC291A9E967E65404FCD987 /* PCMConverter.swift */; };
+		30FAA3B22DC411297C4B432E /* TimedAudioBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB9A3EBD719F56D1C913AD1 /* TimedAudioBuffer.swift */; };
+		CA3FB1F4ACCDE5BCF8ADC60F /* TimelineMixer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574E25A5B63773FCFF424B37 /* TimelineMixer.swift */; };
+		A60EDAD66FD8A039F2D8D260 /* CaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B877FDDAA710486560BFAC7 /* CaptureEngine.swift */; };
+		6D3E10E059268A3602CEDFDE /* CaptureStreamOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */; };
+		0E699B68728563440A02E87D /* CapturedAudioBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */; };
+		23AB9578FD2D62FC05BF4AB1 /* MicrophoneDeviceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */; };
+		249297673A48DA90C2C1370D /* HashVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F8057404099D474109215F /* HashVerifier.swift */; };
+		1718547969DD235731BE65B8 /* ModelDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */; };
+		042C72216392D1228190ED9A /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DA33FB5B253A7B4805F442 /* ModelManager.swift */; };
+		64D3F20E975EED90B0275C12 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BDBB80EDD248948EA88283 /* PermissionManager.swift */; };
+		1DA5C2E87F27BF64FFB41A1D /* AtomicFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */; };
+		6DBDE4CBF6F2B7DA453F4011 /* SessionManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E241F9CD02A442027D56797 /* SessionManifest.swift */; };
+		AB1F517592070552DC9E13D2 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */; };
+		4B1D1AB2D6BF8B68E2A91A8D /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */; };
+		4A00A4F2F6234DE099CE30D6 /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C7AFD4D5228A120D160287 /* TranscriptStore.swift */; };
+		0EF9238BF14823FE82C930F0 /* FinalTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */; };
+		21FDD31C3A01DCB1692478F3 /* PCMFileReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4A2ADA550E12CCD89022BC /* PCMFileReader.swift */; };
+		F134096CEEC722E962646119 /* TranscriptDeduplicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD7D0736AA438B0F10A6AA4 /* TranscriptDeduplicator.swift */; };
+		555C7EE7996E3A9B42FB19CB /* WhisperEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F827D1863B1EF86A17001C /* WhisperEngine.swift */; };
+		BE38BDBE6E3477647521A57D /* WhisperParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12E8CDD9C725FA8E8267458 /* WhisperParameters.swift */; };
+		BF1F1D77868DA130AB237607 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49BD64846B85D8B175A22C91 /* MenuBarView.swift */; };
+		4C8B7EB0F1DCCE1E6760E4F2 /* ModelManifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */; };
+		43D2DAC384E0114FAD5C9D03 /* ThirdPartyNotices.md in Resources */ = {isa = PBXBuildFile; fileRef = 016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */; };
+		BF3515B1579247384CB8869E /* WhisperBuild.json in Resources */ = {isa = PBXBuildFile; fileRef = 1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */; };
+		B915CA71969329371729287C /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45AD4CC962476B5EB34F853D /* whisper.xcframework */; };
+		1D08C3839F75B3DE88717C7F /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 45AD4CC962476B5EB34F853D /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		59F0EF556AF35CA7586D8A1E /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (1D08C3839F75B3DE88717C7F /* whisper.xcframework in Embed Frameworks */, );
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		63560B5A635E68BB45023041 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/App/AppCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		EA2B33C5BFBA8796916FBC5E /* HaeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/App/HaeApp.swift; sourceTree = SOURCE_ROOT; };
+		CEF2BD9D8FB70C984DEEDFA1 /* AudioLevelMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/AudioLevelMeter.swift; sourceTree = SOURCE_ROOT; };
+		AE918524EFA5711555D2EF59 /* AudioPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/AudioPipeline.swift; sourceTree = SOURCE_ROOT; };
+		B2E6166839C05B5795254A56 /* DurablePCMWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/DurablePCMWriter.swift; sourceTree = SOURCE_ROOT; };
+		1FC291A9E967E65404FCD987 /* PCMConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/PCMConverter.swift; sourceTree = SOURCE_ROOT; };
+		0AB9A3EBD719F56D1C913AD1 /* TimedAudioBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/TimedAudioBuffer.swift; sourceTree = SOURCE_ROOT; };
+		574E25A5B63773FCFF424B37 /* TimelineMixer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/TimelineMixer.swift; sourceTree = SOURCE_ROOT; };
+		7B877FDDAA710486560BFAC7 /* CaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CaptureEngine.swift; sourceTree = SOURCE_ROOT; };
+		C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CaptureStreamOutput.swift; sourceTree = SOURCE_ROOT; };
+		F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/CapturedAudioBuffer.swift; sourceTree = SOURCE_ROOT; };
+		8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Capture/MicrophoneDeviceRepository.swift; sourceTree = SOURCE_ROOT; };
+		54F8057404099D474109215F /* HashVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/HashVerifier.swift; sourceTree = SOURCE_ROOT; };
+		B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/ModelDescriptor.swift; sourceTree = SOURCE_ROOT; };
+		91DA33FB5B253A7B4805F442 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Models/ModelManager.swift; sourceTree = SOURCE_ROOT; };
+		81BDBB80EDD248948EA88283 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Permissions/PermissionManager.swift; sourceTree = SOURCE_ROOT; };
+		7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/AtomicFileWriter.swift; sourceTree = SOURCE_ROOT; };
+		6E241F9CD02A442027D56797 /* SessionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/SessionManifest.swift; sourceTree = SOURCE_ROOT; };
+		9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/SessionRepository.swift; sourceTree = SOURCE_ROOT; };
+		257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/Transcript.swift; sourceTree = SOURCE_ROOT; };
+		70C7AFD4D5228A120D160287 /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Storage/TranscriptStore.swift; sourceTree = SOURCE_ROOT; };
+		AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/FinalTranscriptionService.swift; sourceTree = SOURCE_ROOT; };
+		1F4A2ADA550E12CCD89022BC /* PCMFileReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/PCMFileReader.swift; sourceTree = SOURCE_ROOT; };
+		ACD7D0736AA438B0F10A6AA4 /* TranscriptDeduplicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/TranscriptDeduplicator.swift; sourceTree = SOURCE_ROOT; };
+		B3F827D1863B1EF86A17001C /* WhisperEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/WhisperEngine.swift; sourceTree = SOURCE_ROOT; };
+		A12E8CDD9C725FA8E8267458 /* WhisperParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Transcription/WhisperParameters.swift; sourceTree = SOURCE_ROOT; };
+		49BD64846B85D8B175A22C91 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Features/MenuBar/MenuBarView.swift; sourceTree = SOURCE_ROOT; };
+		CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Hae/Core/Models/ModelManifest.json; sourceTree = SOURCE_ROOT; };
+		016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Hae/Resources/ThirdPartyNotices.md; sourceTree = SOURCE_ROOT; };
+		1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Hae/Resources/WhisperBuild.json; sourceTree = SOURCE_ROOT; };
+		45AD4CC962476B5EB34F853D /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Frameworks/whisper.xcframework; sourceTree = SOURCE_ROOT; };
+		D957E19B16B69713B7749A90 /* Hae.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Hae.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		69680EDE0CF9B24DB8DBFE04 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (B915CA71969329371729287C /* whisper.xcframework in Frameworks */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		870B3294C0CBD48AF6BBCC1B = {isa = PBXGroup; children = (96DC7B6B5526E30EFB51C316 /* Hae */, B906EB298B3478841B2D660B /* Frameworks */, 7168E62E5CDB0DF79ADF5742 /* Products */, ); sourceTree = "<group>"; };
+		96DC7B6B5526E30EFB51C316 /* Hae */ = {isa = PBXGroup; children = (
+				63560B5A635E68BB45023041 /* AppCoordinator.swift */,
+				EA2B33C5BFBA8796916FBC5E /* HaeApp.swift */,
+				CEF2BD9D8FB70C984DEEDFA1 /* AudioLevelMeter.swift */,
+				AE918524EFA5711555D2EF59 /* AudioPipeline.swift */,
+				B2E6166839C05B5795254A56 /* DurablePCMWriter.swift */,
+				1FC291A9E967E65404FCD987 /* PCMConverter.swift */,
+				0AB9A3EBD719F56D1C913AD1 /* TimedAudioBuffer.swift */,
+				574E25A5B63773FCFF424B37 /* TimelineMixer.swift */,
+				7B877FDDAA710486560BFAC7 /* CaptureEngine.swift */,
+				C91703A131F8DE5DF4A69BAA /* CaptureStreamOutput.swift */,
+				F85BD8B5D768CF6731C7AC2C /* CapturedAudioBuffer.swift */,
+				8EBF49A1B2B80EC0BE51F33A /* MicrophoneDeviceRepository.swift */,
+				54F8057404099D474109215F /* HashVerifier.swift */,
+				B3DBF6CA283C9A008835033E /* ModelDescriptor.swift */,
+				91DA33FB5B253A7B4805F442 /* ModelManager.swift */,
+				81BDBB80EDD248948EA88283 /* PermissionManager.swift */,
+				7E975739F5A2D2D6288C1468 /* AtomicFileWriter.swift */,
+				6E241F9CD02A442027D56797 /* SessionManifest.swift */,
+				9E90E4D1D5013D60C11B46FB /* SessionRepository.swift */,
+				257F8C2929EDB9B2F2C8EDFF /* Transcript.swift */,
+				70C7AFD4D5228A120D160287 /* TranscriptStore.swift */,
+				AA9A0E220102DBA26BDA4573 /* FinalTranscriptionService.swift */,
+				1F4A2ADA550E12CCD89022BC /* PCMFileReader.swift */,
+				ACD7D0736AA438B0F10A6AA4 /* TranscriptDeduplicator.swift */,
+				B3F827D1863B1EF86A17001C /* WhisperEngine.swift */,
+				A12E8CDD9C725FA8E8267458 /* WhisperParameters.swift */,
+				49BD64846B85D8B175A22C91 /* MenuBarView.swift */,
+				CBBC29B23385FCD2CF2358F3 /* ModelManifest.json */,
+				016D307A8A294B087DCB18C4 /* ThirdPartyNotices.md */,
+				1B8497DA1F2B36A4D0B23D3F /* WhisperBuild.json */,
+			); name = Hae; sourceTree = "<group>"; };
+		B906EB298B3478841B2D660B /* Frameworks */ = {isa = PBXGroup; children = (45AD4CC962476B5EB34F853D /* whisper.xcframework */, ); name = Frameworks; sourceTree = "<group>"; };
+		7168E62E5CDB0DF79ADF5742 /* Products */ = {isa = PBXGroup; children = (D957E19B16B69713B7749A90 /* Hae.app */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8A3AD980EC179856012B7E /* Hae */ = {isa = PBXNativeTarget; buildConfigurationList = 7DE97F2CECB2601227982F09; buildPhases = (F612CD2E22E187AC48B5913C, 69680EDE0CF9B24DB8DBFE04, 86F6FE2DD6E869C1842A14B3, 59F0EF556AF35CA7586D8A1E, ); buildRules = (); dependencies = (); name = Hae; productName = Hae; productReference = D957E19B16B69713B7749A90; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 1600; LastUpgradeCheck = 1600; TargetAttributes = {0E8A3AD980EC179856012B7E = {CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = 6650A2B5E24FA7522CE6B81C; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = 870B3294C0CBD48AF6BBCC1B; productRefGroup = 7168E62E5CDB0DF79ADF5742; projectDirPath = ""; projectRoot = ""; targets = (0E8A3AD980EC179856012B7E, ); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		86F6FE2DD6E869C1842A14B3 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
+				4C8B7EB0F1DCCE1E6760E4F2 /* ModelManifest.json in Resources */,
+				43D2DAC384E0114FAD5C9D03 /* ThirdPartyNotices.md in Resources */,
+				BF3515B1579247384CB8869E /* WhisperBuild.json in Resources */,
+			); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F612CD2E22E187AC48B5913C /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+				15CC848F7337765982AA1FC0 /* AppCoordinator.swift in Sources */,
+				156A56D8CC793D83E78EC543 /* HaeApp.swift in Sources */,
+				D3C2156EB7529104A5490854 /* AudioLevelMeter.swift in Sources */,
+				1CBCFB22761A5FE77E4444D4 /* AudioPipeline.swift in Sources */,
+				FC6812C04AE2281E87307111 /* DurablePCMWriter.swift in Sources */,
+				41FE8D860B4537E8046B1010 /* PCMConverter.swift in Sources */,
+				30FAA3B22DC411297C4B432E /* TimedAudioBuffer.swift in Sources */,
+				CA3FB1F4ACCDE5BCF8ADC60F /* TimelineMixer.swift in Sources */,
+				A60EDAD66FD8A039F2D8D260 /* CaptureEngine.swift in Sources */,
+				6D3E10E059268A3602CEDFDE /* CaptureStreamOutput.swift in Sources */,
+				0E699B68728563440A02E87D /* CapturedAudioBuffer.swift in Sources */,
+				23AB9578FD2D62FC05BF4AB1 /* MicrophoneDeviceRepository.swift in Sources */,
+				249297673A48DA90C2C1370D /* HashVerifier.swift in Sources */,
+				1718547969DD235731BE65B8 /* ModelDescriptor.swift in Sources */,
+				042C72216392D1228190ED9A /* ModelManager.swift in Sources */,
+				64D3F20E975EED90B0275C12 /* PermissionManager.swift in Sources */,
+				1DA5C2E87F27BF64FFB41A1D /* AtomicFileWriter.swift in Sources */,
+				6DBDE4CBF6F2B7DA453F4011 /* SessionManifest.swift in Sources */,
+				AB1F517592070552DC9E13D2 /* SessionRepository.swift in Sources */,
+				4B1D1AB2D6BF8B68E2A91A8D /* Transcript.swift in Sources */,
+				4A00A4F2F6234DE099CE30D6 /* TranscriptStore.swift in Sources */,
+				0EF9238BF14823FE82C930F0 /* FinalTranscriptionService.swift in Sources */,
+				21FDD31C3A01DCB1692478F3 /* PCMFileReader.swift in Sources */,
+				F134096CEEC722E962646119 /* TranscriptDeduplicator.swift in Sources */,
+				555C7EE7996E3A9B42FB19CB /* WhisperEngine.swift in Sources */,
+				BE38BDBE6E3477647521A57D /* WhisperParameters.swift in Sources */,
+				BF1F1D77868DA130AB237607 /* MenuBarView.swift in Sources */,
+			); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D12546C7310DEE778E55E187 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Debug; };
+		AA23A758EC6A71B7321371F8 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Release; };
+		E1698793B8B09B32821D3120 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+		FFACE85B9B63AB569355131D /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGN_ENTITLEMENTS = Hae/Hae.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEAD_CODE_STRIPPING = YES; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hae/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", ); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = no.froystein.hae; PRODUCT_NAME = Hae; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6650A2B5E24FA7522CE6B81C /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (D12546C7310DEE778E55E187, AA23A758EC6A71B7321371F8, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		7DE97F2CECB2601227982F09 /* Build configuration list for PBXNativeTarget */ = {isa = XCConfigurationList; buildConfigurations = (E1698793B8B09B32821D3120, FFACE85B9B63AB569355131D, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}
