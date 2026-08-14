@@ -27,7 +27,13 @@ vad_hash="$(shasum -a 256 "$app/Contents/Resources/Models/ggml-silero-v6.2.0.bin
 [[ "$vad_hash" == "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987" ]]
 
 identity="${HAE_CODESIGN_IDENTITY:--}"
-codesign --force --deep --options runtime --entitlements "$root/Hae/Hae.entitlements" \
+signing_options=()
+if [[ "$identity" != "-" ]]; then
+    signing_options=(--options runtime)
+fi
+framework="$app/Contents/Frameworks/whisper.framework"
+codesign --force "${signing_options[@]}" --sign "$identity" "$framework"
+codesign --force "${signing_options[@]}" --entitlements "$root/Hae/Hae.entitlements" \
     --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
 
