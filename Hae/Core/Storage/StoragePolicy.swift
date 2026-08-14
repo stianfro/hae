@@ -29,3 +29,29 @@ public enum DiskSpacePolicy {
     return status(availableBytes: freeSize.int64Value)
   }
 }
+
+public enum AudioRetentionPolicy: String, CaseIterable, Codable, Sendable {
+  case immediately
+  case sevenDays
+  case thirtyDays
+  case forever
+
+  public func shouldDeleteAudio(for manifest: SessionManifest, now: Date = Date()) -> Bool {
+    guard manifest.status == .completed else { return false }
+    switch self {
+    case .immediately:
+      return true
+    case .sevenDays:
+      return isOlder(manifest, than: 7, now: now)
+    case .thirtyDays:
+      return isOlder(manifest, than: 30, now: now)
+    case .forever:
+      return false
+    }
+  }
+
+  private func isOlder(_ manifest: SessionManifest, than days: Int, now: Date) -> Bool {
+    let referenceDate = manifest.stoppedAt ?? manifest.createdAt
+    return now.timeIntervalSince(referenceDate) >= Double(days * 24 * 60 * 60)
+  }
+}

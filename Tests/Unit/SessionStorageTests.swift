@@ -53,6 +53,36 @@ func diskSpacePolicyUsesRequiredThresholds() {
 }
 
 @Test
+func retentionPolicyCalculatesAudioExpiry() throws {
+  let stoppedAt = Date(timeIntervalSince1970: 1_700_000_000)
+  var manifest = makeManifest()
+  manifest.stoppedAt = stoppedAt
+  try manifest.transition(to: .captured)
+  try manifest.transition(to: .finalizing)
+  try manifest.transition(to: .completed)
+
+  #expect(
+    !AudioRetentionPolicy.sevenDays.shouldDeleteAudio(
+      for: manifest,
+      now: stoppedAt.addingTimeInterval(7 * 24 * 60 * 60 - 1)
+    )
+  )
+  #expect(
+    AudioRetentionPolicy.sevenDays.shouldDeleteAudio(
+      for: manifest,
+      now: stoppedAt.addingTimeInterval(7 * 24 * 60 * 60)
+    )
+  )
+  #expect(AudioRetentionPolicy.immediately.shouldDeleteAudio(for: manifest, now: stoppedAt))
+  #expect(!AudioRetentionPolicy.forever.shouldDeleteAudio(for: manifest, now: .distantFuture))
+}
+
+@Test
+func retentionNeverDeletesIncompleteSessionAudio() {
+  #expect(!AudioRetentionPolicy.immediately.shouldDeleteAudio(for: makeManifest()))
+}
+
+@Test
 func recoveryRepairsPartialRecording() async throws {
   let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: directory) }
@@ -90,6 +120,28 @@ func recoveryMakesInterruptedFinalizationRetryable() async throws {
   #expect(sessions[0].manifest.status == .interrupted)
   #expect(sessions[0].manifest.durationFrames == 2)
   #expect(sessions[0].manifest.failure?.stage == "recovery")
+}
+
+@Test
+func repositoryRenamesAndDeletesSessions() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let repository = SessionRepository(sessionsDirectory: directory)
+  let (_, paths) = try await repository.createSession(model: makeDescriptor())
+  try Data([0, 1]).write(to: paths.mixedPCM)
+
+  let renamed = try await repository.renameSession(paths: paths, title: "  Weekly sync  ")
+  #expect(renamed.title == "Weekly sync")
+  await #expect(throws: SessionRepositoryError.emptyTitle) {
+    try await repository.renameSession(paths: paths, title: "  ")
+  }
+
+  try await repository.deleteAudio(paths: paths)
+  #expect(!FileManager.default.fileExists(atPath: paths.mixedPCM.path))
+  #expect(FileManager.default.fileExists(atPath: paths.manifest.path))
+
+  try await repository.deleteSession(paths: paths)
+  #expect(!FileManager.default.fileExists(atPath: paths.directory.path))
 }
 
 @Test

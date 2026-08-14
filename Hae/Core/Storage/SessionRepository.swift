@@ -5,10 +5,28 @@ public struct SessionPaths: Equatable, Sendable {
 
   public var manifest: URL { directory.appendingPathComponent("session.json") }
   public var mixedPCM: URL { directory.appendingPathComponent("audio-mix.pcm16le") }
+  public var mixedCAF: URL { directory.appendingPathComponent("audio-mix.caf") }
+  public var systemPCM: URL { directory.appendingPathComponent("audio-system.pcm16le") }
+  public var microphonePCM: URL { directory.appendingPathComponent("audio-microphone.pcm16le") }
+  public var liveTranscript: URL { directory.appendingPathComponent("transcript.live.jsonl") }
   public var transcriptJSON: URL { directory.appendingPathComponent("transcript.json") }
   public var transcriptMarkdown: URL { directory.appendingPathComponent("transcript.md") }
   public var transcriptText: URL { directory.appendingPathComponent("transcript.txt") }
   public var transcriptSRT: URL { directory.appendingPathComponent("transcript.srt") }
+}
+
+public enum SessionRepositoryError: Error, LocalizedError, Equatable, Sendable {
+  case emptyTitle
+  case sessionOutsideRepository
+
+  public var errorDescription: String? {
+    switch self {
+    case .emptyTitle:
+      "A session title cannot be empty."
+    case .sessionOutsideRepository:
+      "The session is outside the configured sessions directory."
+    }
+  }
 }
 
 public struct StoredSession: Equatable, Sendable {
@@ -133,6 +151,32 @@ public actor SessionRepository {
     }
   }
 
+  public func renameSession(paths: SessionPaths, title: String) throws -> SessionManifest {
+    try validate(paths: paths)
+    let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !title.isEmpty else { throw SessionRepositoryError.emptyTitle }
+    var manifest = try load(paths: paths)
+    manifest.title = title
+    try save(manifest, paths: paths)
+    return manifest
+  }
+
+  public func deleteAudio(paths: SessionPaths) throws {
+    try validate(paths: paths)
+    for url in [paths.mixedPCM, paths.mixedCAF, paths.systemPCM, paths.microphonePCM] {
+      if FileManager.default.fileExists(atPath: url.path) {
+        try FileManager.default.removeItem(at: url)
+      }
+    }
+  }
+
+  public func deleteSession(paths: SessionPaths) throws {
+    try validate(paths: paths)
+    if FileManager.default.fileExists(atPath: paths.directory.path) {
+      try FileManager.default.removeItem(at: paths.directory)
+    }
+  }
+
   public static func completePCMFrameCount(
     at url: URL,
     repairTrailingByte: Bool
@@ -157,5 +201,13 @@ public actor SessionRepository {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     return "Meeting \(formatter.string(from: date))"
+  }
+
+  private func validate(paths: SessionPaths) throws {
+    let expectedParent = sessionsDirectory.standardizedFileURL
+    let actualParent = paths.directory.deletingLastPathComponent().standardizedFileURL
+    guard expectedParent == actualParent else {
+      throw SessionRepositoryError.sessionOutsideRepository
+    }
   }
 }

@@ -28,6 +28,10 @@ public actor TranscriptStore {
     try AtomicFileWriter.write(Data(srt.utf8), to: paths.transcriptSRT)
   }
 
+  public func load(paths: SessionPaths) throws -> Transcript {
+    try JSONDecoder().decode(Transcript.self, from: Data(contentsOf: paths.transcriptJSON))
+  }
+
   public static func srtTimestamp(milliseconds: Int) -> String {
     let clamped = max(0, milliseconds)
     let hours = clamped / 3_600_000
