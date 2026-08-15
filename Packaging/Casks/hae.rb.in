@@ -15,4 +15,10 @@ cask "hae" do
   app "Hae.app"
 
   zap trash: "~/Library/Containers/no.froystein.hae"
+
+  caveats <<~EOS
+    This beta is ad hoc signed and has not been notarized by Apple.
+    On first launch, macOS may block it. After attempting to open Hæ?, go to
+    System Settings > Privacy & Security and choose Open Anyway.
+  EOS
 end

@@ -84,6 +84,18 @@ distribution requires Developer ID signing and Apple notarization. The release
 tasks create the ZIP, checksum, and a generated Homebrew Cask without adding a
 Homebrew runtime dependency.
 
+The current 0.1.0 package is an ad hoc signed personal beta. Install it with:
+
+```bash
+brew tap stianfro/tap
+brew install --cask hae
+```
+
+macOS may block the first launch because Apple has not notarized this build.
+After attempting to open Hæ?, open **System Settings > Privacy & Security** and
+choose **Open Anyway**. Do not disable Gatekeeper globally. Managed Macs may
+not permit this exception.
+
 See [docs/RELEASING.md](docs/RELEASING.md) for certificate setup, notarization,
 GitHub Release commands, Cask generation, and release gates.
 
