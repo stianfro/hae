@@ -92,9 +92,15 @@ brew install --cask hae
 ```
 
 macOS may block the first launch because Apple has not notarized this build.
-After attempting to open Hæ?, open **System Settings > Privacy & Security** and
-choose **Open Anyway**. Do not disable Gatekeeper globally. Managed Macs may
-not permit this exception.
+If **Open Anyway** does not work, remove the quarantine attribute from this app
+only:
+
+```bash
+/usr/bin/xattr -dr com.apple.quarantine /Applications/Hae.app
+```
+
+This does not disable Gatekeeper globally. Managed Macs may not permit this
+exception.
 
 See [docs/RELEASING.md](docs/RELEASING.md) for certificate setup, notarization,
 GitHub Release commands, Cask generation, and release gates.

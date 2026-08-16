@@ -18,7 +18,8 @@ cask "hae" do
 
   caveats <<~EOS
     This beta is ad hoc signed and has not been notarized by Apple.
-    On first launch, macOS may block it. After attempting to open Hæ?, go to
-    System Settings > Privacy & Security and choose Open Anyway.
+    If macOS blocks it, remove the quarantine attribute from this app only:
+      /usr/bin/xattr -dr com.apple.quarantine /Applications/Hae.app
+    This does not disable Gatekeeper globally.
   EOS
 end

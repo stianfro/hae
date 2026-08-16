@@ -4,9 +4,15 @@ Hæ? is a native Apple Silicon menu-bar application that records system audio
 and microphone audio, then transcribes the recording locally with NB-Whisper.
 
 This personal beta is ad hoc signed and has not been notarized by Apple. macOS
-may block its first launch. After attempting to open Hæ?, open **System Settings
-> Privacy & Security** and choose **Open Anyway**. Do not disable Gatekeeper
-globally. Managed Macs may not permit this exception.
+may block its first launch. If **Open Anyway** does not work, remove the
+quarantine attribute from this app only:
+
+```bash
+/usr/bin/xattr -dr com.apple.quarantine /Applications/Hae.app
+```
+
+This does not disable Gatekeeper globally. Managed Macs may not permit this
+exception.
 
 ## Included
 

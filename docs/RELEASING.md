@@ -58,6 +58,13 @@ hae.rb
 identity is provided. That output may be used for a clearly labeled personal or
 controlled beta, but it is not suitable for general distribution. Testers must
 manually approve the application in **System Settings > Privacy & Security**.
+If **Open Anyway** fails, testers can remove the quarantine attribute from this
+application only with:
+
+```bash
+/usr/bin/xattr -dr com.apple.quarantine /Applications/Hae.app
+```
+
 Do not instruct testers to disable Gatekeeper globally.
 
 ## Publish with GitHub CLI
