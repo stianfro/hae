@@ -58,8 +58,8 @@ codesign --verify --deep --strict "$app"
 signed_entitlements="$output/signed-entitlements.plist"
 codesign -d --entitlements :- "$app" > "$signed_entitlements" 2>/dev/null
 plutil -lint "$signed_entitlements"
-if grep -Eq 'com\.apple\.security\.network\.(client|server)' "$signed_entitlements"; then
-    printf 'Release application contains a network entitlement.\n' >&2
+if grep -Fq 'com.apple.security.network.server' "$signed_entitlements"; then
+    printf 'Release application contains a network server entitlement.\n' >&2
     exit 1
 fi
 "$root/Scripts/verify-release.sh" "$app"

@@ -7,9 +7,9 @@ import SwiftUI
 
 struct MenuBarView: View {
   @ObservedObject var coordinator: AppCoordinator
+  @Environment(\.openWindow) private var openWindow
   @State private var showQuitConfirmation = false
   @State private var historyExpanded = true
-  @State private var settingsExpanded = false
   @State private var renameTarget: SessionListItem?
   @State private var renameTitle = ""
   @State private var deleteTarget: SessionListItem?
@@ -45,8 +45,16 @@ struct MenuBarView: View {
       .pickerStyle(.menu)
       .disabled(coordinator.isBusy)
 
-      AudioMeterView(label: "System audio", value: coordinator.meter.system)
-      AudioMeterView(label: coordinator.activeMicrophoneName, value: coordinator.meter.microphone)
+      TranscriptionDestinationLabel(
+        preferences: coordinator.transcriptionPreferences,
+        activeProvider: coordinator.activeTranscriptionProvider,
+        activeConfiguration: coordinator.activeHostedConfiguration
+      )
+
+      LiveAudioMeters(
+        audioMeter: coordinator.audioMeter,
+        microphoneName: coordinator.activeMicrophoneName
+      )
 
       if case .finalizing(let progress) = coordinator.state {
         ProgressView(value: progress)
@@ -82,10 +90,14 @@ struct MenuBarView: View {
 
       if coordinator.canRetryTranscription {
         Button(action: coordinator.retryTranscription) {
-          Label("Retry transcription", systemImage: "arrow.clockwise")
+          Label("Retry original transcription", systemImage: "arrow.clockwise")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+        .disabled(coordinator.isModelOperationRunning || coordinator.isFilePanelOpen)
+        Text("Retries use the session's original transcription destination.")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
       }
 
       if coordinator.hasCompletedTranscript {
@@ -122,7 +134,8 @@ struct MenuBarView: View {
               ForEach(coordinator.sessionHistory) { session in
                 SessionHistoryRow(
                   session: session,
-                  isBusy: coordinator.isBusy,
+                  isBusy: coordinator.isBusy || coordinator.isModelOperationRunning
+                    || coordinator.isFilePanelOpen,
                   open: { coordinator.openTranscript(sessionID: session.id) },
                   retry: { coordinator.retryTranscription(sessionID: session.id) },
                   export: { coordinator.exportSession(sessionID: session.id) },
@@ -145,112 +158,6 @@ struct MenuBarView: View {
         }
       }
 
-      DisclosureGroup(isExpanded: $settingsExpanded) {
-        VStack(alignment: .leading, spacing: 10) {
-          Toggle(
-            "Launch at login",
-            isOn: Binding(
-              get: { coordinator.launchAtLoginEnabled },
-              set: { coordinator.setLaunchAtLogin($0) }
-            )
-          )
-          .disabled(coordinator.isBusy)
-
-          Toggle(
-            "Show completion notification",
-            isOn: Binding(
-              get: { coordinator.completionNotificationsEnabled },
-              set: { coordinator.setCompletionNotifications($0) }
-            )
-          )
-
-          Toggle(
-            "Prevent idle sleep while working",
-            isOn: Binding(
-              get: { coordinator.preventIdleSleepEnabled },
-              set: { coordinator.setPreventIdleSleep($0) }
-            )
-          )
-          .disabled(coordinator.isBusy)
-
-          Toggle(
-            "Preserve separate source tracks",
-            isOn: Binding(
-              get: { coordinator.preserveSeparateTracksEnabled },
-              set: { coordinator.setPreserveSeparateTracks($0) }
-            )
-          )
-          .disabled(coordinator.isBusy)
-
-          Picker(
-            "Audio retention",
-            selection: Binding(
-              get: { coordinator.audioRetentionPolicy },
-              set: { coordinator.setAudioRetentionPolicy($0) }
-            )
-          ) {
-            Text("Delete after transcription").tag(AudioRetentionPolicy.immediately)
-            Text("Keep for 7 days").tag(AudioRetentionPolicy.sevenDays)
-            Text("Keep for 30 days").tag(AudioRetentionPolicy.thirtyDays)
-            Text("Keep indefinitely").tag(AudioRetentionPolicy.forever)
-          }
-          .disabled(coordinator.isBusy)
-
-          Picker(
-            "Capture display",
-            selection: Binding(
-              get: { coordinator.selectedDisplayID },
-              set: { coordinator.selectDisplay(id: $0) }
-            )
-          ) {
-            Text("Main display (automatic)").tag(nil as CGDirectDisplayID?)
-            ForEach(coordinator.availableDisplays) { display in
-              Text("\(display.name) (\(display.width) × \(display.height))")
-                .tag(Optional(display.id))
-            }
-          }
-          .disabled(coordinator.isBusy || coordinator.availableDisplays.isEmpty)
-
-          GainControl(
-            label: "System audio gain",
-            value: Binding(
-              get: { coordinator.systemAudioGain },
-              set: { coordinator.setSystemAudioGain($0) }
-            )
-          )
-          .disabled(coordinator.isBusy)
-
-          GainControl(
-            label: "Microphone gain",
-            value: Binding(
-              get: { coordinator.microphoneGain },
-              set: { coordinator.setMicrophoneGain($0) }
-            )
-          )
-          .disabled(coordinator.isBusy)
-
-          HStack {
-            Button("Sessions folder") { coordinator.openSessionsFolder() }
-            Button("Import models") { coordinator.importModels() }
-              .disabled(coordinator.isBusy)
-          }
-
-          HStack {
-            Button("Current session") { coordinator.openSessionDirectory() }
-              .disabled(coordinator.sessionDirectory == nil)
-            Button("Privacy settings") { coordinator.openPrivacySettings() }
-          }
-
-          Button("Verify transcription models") { coordinator.verifyInstalledModels() }
-            .disabled(coordinator.isBusy)
-        }
-        .font(.caption)
-        .padding(.top, 8)
-      } label: {
-        Label("Settings", systemImage: "gearshape")
-          .font(.subheadline.weight(.semibold))
-      }
-
       if let notice = coordinator.sessionActionNotice {
         Text(notice)
           .font(.caption2)
@@ -258,7 +165,15 @@ struct MenuBarView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
 
+      Divider()
       HStack {
+        Button {
+          NSApplication.shared.activate()
+          openWindow(id: SettingsView.windowID)
+        } label: {
+          Label("Settings…", systemImage: "gearshape")
+        }
+        .keyboardShortcut(",", modifiers: .command)
         Spacer()
         Button("Quit") {
           if coordinator.isBusy {
@@ -330,11 +245,16 @@ struct MenuBarView: View {
   }
 
   private var buttonDisabled: Bool {
+    if coordinator.isRestoringSessions || coordinator.isModelOperationRunning
+      || coordinator.isFilePanelOpen || coordinator.isSessionOperationRunning
+    {
+      return true
+    }
     switch coordinator.state {
     case .preparing, .finalizing:
-      true
+      return true
     default:
-      false
+      return false
     }
   }
 
@@ -385,6 +305,8 @@ private struct SessionHistoryRow: View {
             Text(session.durationText)
             Text("·")
             Text(session.statusText)
+            Text("·")
+            Text(session.hostedConfiguration == nil ? "Local" : "Hosted")
           }
           .font(.caption2)
           .foregroundStyle(.secondary)
@@ -399,8 +321,11 @@ private struct SessionHistoryRow: View {
         Button("Open transcript", action: open)
           .disabled(!session.hasTranscript)
         if session.canRetryTranscription {
-          Button("Retry transcription", action: retry)
-            .disabled(isBusy)
+          Button(
+            session.hostedConfiguration == nil
+              ? "Retry on this Mac" : "Retry with original hosted server", action: retry
+          )
+          .disabled(isBusy)
         }
         Button("Export transcript files", action: export)
           .disabled(!session.hasTranscript || isBusy)
@@ -446,19 +371,42 @@ private struct AudioMeterView: View {
   }
 }
 
-private struct GainControl: View {
-  let label: String
-  @Binding var value: Float
+private struct LiveAudioMeters: View {
+  @ObservedObject var audioMeter: AudioMeterModel
+  let microphoneName: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
-      HStack {
-        Text(label)
-        Spacer()
-        Text("\(value, specifier: "%.1f")×")
-          .foregroundStyle(.secondary)
-      }
-      Slider(value: $value, in: 0...1.5, step: 0.1)
+    VStack(spacing: 12) {
+      AudioMeterView(label: "System audio", value: audioMeter.snapshot.system)
+      AudioMeterView(label: microphoneName, value: audioMeter.snapshot.microphone)
     }
+  }
+}
+
+private struct TranscriptionDestinationLabel: View {
+  @ObservedObject var preferences: TranscriptionPreferences
+  let activeProvider: TranscriptionProvider?
+  let activeConfiguration: HostedTranscriptionConfiguration?
+
+  var body: some View {
+    Label {
+      Text(destinationText)
+        .lineLimit(1)
+    } icon: {
+      Image(systemName: provider == .local ? "lock.shield" : "network")
+    }
+    .font(.caption)
+    .foregroundStyle(.secondary)
+  }
+
+  private var provider: TranscriptionProvider {
+    activeProvider ?? preferences.provider
+  }
+
+  private var destinationText: String {
+    let prefix = activeProvider == nil ? "New recordings: " : ""
+    if provider == .local { return prefix + "On this Mac" }
+    let configuration = activeConfiguration ?? preferences.configuration
+    return prefix + "Hosted · " + configuration.model
   }
 }

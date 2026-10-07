@@ -24,12 +24,21 @@ smoke-model:
 build:
     ./Scripts/run-swift.sh build
 
+build-app:
+    bash ./Scripts/build-app.sh
+
 test:
     ./Scripts/run-swift.sh test
+
+test-filter pattern:
+    ./Scripts/run-swift.sh test --filter {{quote(pattern)}}
 
 format:
     swift format format --in-place --recursive Hae Tests Package.swift
     swift format format --in-place Scripts/draw-app-icon.swift
+
+format-files +files:
+    swift format format --in-place {{files}}
 
 lint:
     swift format lint --strict --recursive Hae Tests Package.swift

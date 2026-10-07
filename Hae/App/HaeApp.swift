@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -11,6 +12,28 @@ struct HaeApp: App {
       MenuBarIcon(isRecording: coordinator.state == .recording)
     }
     .menuBarExtraStyle(.window)
+
+    Window("Hæ? Settings", id: SettingsView.windowID) {
+      SettingsView(coordinator: coordinator)
+    }
+    .windowResizability(.contentSize)
+    .defaultLaunchBehavior(.suppressed)
+    .restorationBehavior(.disabled)
+    .commands { SettingsCommands() }
+  }
+}
+
+private struct SettingsCommands: Commands {
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some Commands {
+    CommandGroup(replacing: .appSettings) {
+      Button("Settings…") {
+        NSApplication.shared.activate()
+        openWindow(id: SettingsView.windowID)
+      }
+      .keyboardShortcut(",", modifiers: .command)
+    }
   }
 }
 

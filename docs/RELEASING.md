@@ -40,7 +40,7 @@ This process:
 2. Builds the arm64 Release application.
 3. Copies the verified models and application license into the bundle.
 4. Signs the embedded framework and application with the hardened runtime.
-5. Rejects network client or server entitlements.
+5. Requires the outbound network client entitlement and rejects network server access.
 6. Creates a ZIP archive and submits it to Apple notarization.
 7. Staples and validates the ticket.
 8. Recreates the ZIP and writes its SHA-256 checksum.
@@ -98,7 +98,7 @@ Do not publish the draft until all of these are recorded:
 - Both local microphone and system audio appear in a 60-second capture.
 - Capture still works with the meeting or playback window minimized.
 - Recovery and retry pass after terminating recording and finalization.
-- The network-disabled workflow completes.
+- The on-device workflow completes with networking disabled. Hosted mode fails safely offline.
 - `just ci`, `just smoke-model`, and `just notarize-release` pass.
 - `spctl`, `codesign`, `stapler`, and the generated Cask all validate.
 - The repository and release tag contain the root MIT license and bundled

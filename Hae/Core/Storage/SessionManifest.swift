@@ -12,6 +12,11 @@ public enum SessionStatus: String, Codable, Sendable {
 public struct SessionModelReference: Codable, Equatable, Sendable {
   public let id: String
   public let sha256: String
+
+  public init(id: String, sha256: String) {
+    self.id = id
+    self.sha256 = sha256
+  }
 }
 
 public struct SessionFailure: Codable, Equatable, Sendable {
@@ -38,6 +43,8 @@ public struct SessionManifest: Codable, Equatable, Sendable {
   public let sampleFormat: String
   public let model: SessionModelReference
   public let language: String
+  // Missing in older manifests means local transcription. Never stores credentials.
+  public let hostedConfiguration: HostedTranscriptionConfiguration?
   public var captureDisplayID: UInt32?
   public var microphoneDeviceID: String?
   public var separateTracks: Bool
@@ -51,7 +58,8 @@ public struct SessionManifest: Codable, Equatable, Sendable {
     createdAt: Date = Date(),
     startedAt: Date = Date(),
     model: SessionModelReference,
-    language: String = "no"
+    language: String = "no",
+    hostedConfiguration: HostedTranscriptionConfiguration? = nil
   ) {
     schemaVersion = 1
     self.id = id
@@ -66,6 +74,7 @@ public struct SessionManifest: Codable, Equatable, Sendable {
     sampleFormat = "pcm_s16le"
     self.model = model
     self.language = language
+    self.hostedConfiguration = hostedConfiguration
     captureDisplayID = nil
     microphoneDeviceID = nil
     separateTracks = false
