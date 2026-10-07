@@ -25,6 +25,7 @@ struct SessionListItem: Identifiable, Equatable {
   let durationFrames: Int64
   let hasTranscript: Bool
   let hasAudio: Bool
+  let hostedConfiguration: HostedTranscriptionConfiguration?
 
   var canRetryTranscription: Bool {
     hasAudio && status != .completed && status != .recording
@@ -60,9 +61,19 @@ struct SessionListItem: Identifiable, Equatable {
 }
 
 @MainActor
+final class AudioMeterModel: ObservableObject {
+  @Published var snapshot = AudioMeterSnapshot(system: 0, microphone: 0)
+}
+
+@MainActor
 final class AppCoordinator: ObservableObject {
   @Published private(set) var state: ApplicationState = .idle
-  @Published private(set) var meter = AudioMeterSnapshot(system: 0, microphone: 0)
+  let audioMeter = AudioMeterModel()
+  let transcriptionPreferences = TranscriptionPreferences()
+  @Published private(set) var isRestoringSessions = true
+  @Published private(set) var isModelOperationRunning = false
+  @Published private(set) var isFilePanelOpen = false
+  @Published private(set) var isSessionOperationRunning = false
   @Published private(set) var activeMicrophoneName = "System default"
   @Published private(set) var availableMicrophones: [MicrophoneDevice] = []
   @Published private(set) var selectedMicrophoneID: String?
@@ -98,6 +109,8 @@ final class AppCoordinator: ObservableObject {
   private var lastSystemSignalAt: Date?
   private var lastMicrophoneSignalAt: Date?
   private var storedSessions: [StoredSession] = []
+  private var microphoneRefreshTask: Task<Void, Never>?
+  private var defaultMicrophone: MicrophoneDevice?
 
   init() {
     let defaults = UserDefaults.standard
@@ -124,6 +137,7 @@ final class AppCoordinator: ObservableObject {
     if defaults.object(forKey: "microphoneGain") != nil {
       microphoneGain = Float(defaults.double(forKey: "microphoneGain"))
     }
+    selectedMicrophoneID = defaults.string(forKey: "microphoneDeviceID")
     launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
     refreshMicrophones()
     observeLifecycleNotifications()
@@ -133,7 +147,12 @@ final class AppCoordinator: ObservableObject {
   }
 
   var isBusy: Bool {
-    switch state {
+    if isRestoringSessions || isModelOperationRunning || isFilePanelOpen
+      || isSessionOperationRunning
+    {
+      return true
+    }
+    return switch state {
     case .preparing, .recording, .finalizing:
       true
     default:
@@ -144,7 +163,7 @@ final class AppCoordinator: ObservableObject {
   var statusText: String {
     switch state {
     case .idle:
-      "Ready"
+      isRestoringSessions ? "Loading sessions" : "Ready"
     case .preparing:
       "Preparing recording"
     case .recording:
@@ -159,33 +178,46 @@ final class AppCoordinator: ObservableObject {
   }
 
   var hasCompletedTranscript: Bool {
-    guard case .completed = state, let paths else { return false }
-    return FileManager.default.fileExists(atPath: paths.transcriptText.path)
+    guard case .completed = state, let manifest else { return false }
+    return storedSession(id: manifest.id)?.hasTranscript == true
+  }
+
+  var activeTranscriptionProvider: TranscriptionProvider? {
+    switch state {
+    case .recording, .finalizing:
+      guard let manifest else { return nil }
+      return manifest.hostedConfiguration == nil ? .local : .hosted
+    default:
+      return nil
+    }
+  }
+
+  var activeHostedConfiguration: HostedTranscriptionConfiguration? {
+    activeTranscriptionProvider == .hosted ? manifest?.hostedConfiguration : nil
   }
 
   var canRetryTranscription: Bool {
-    guard !isBusy, let manifest, let paths else { return false }
-    guard Self.isRetryable(manifest.status) else { return false }
-    let frameCount =
-      (try? SessionRepository.completePCMFrameCount(
-        at: paths.mixedPCM,
-        repairTrailingByte: false
-      )) ?? 0
-    return frameCount > 0
+    guard !isBusy, let manifest, Self.isRetryable(manifest.status) else { return false }
+    return storedSession(id: manifest.id)?.hasAudio == true
   }
 
   func toggleRecording() {
+    guard !isRestoringSessions, !isFilePanelOpen, !isModelOperationRunning,
+      !isSessionOperationRunning
+    else { return }
     switch state {
     case .recording:
+      state = .finalizing(0)
       Task { await stopRecording() }
     case .idle, .completed, .failed:
+      state = .preparing
       Task { await startRecording() }
     case .preparing, .finalizing:
       break
     }
   }
 
-  func startRecording() async {
+  private func startRecording() async {
     state = .preparing
     manifest = nil
     paths = nil
@@ -195,6 +227,7 @@ final class AppCoordinator: ObservableObject {
     signalWarnings = []
     transcriptActionNotice = nil
     refreshMicrophones()
+    await microphoneRefreshTask?.value
     do {
       let permissions = await permissionManager.requestRequiredPermissions()
       guard permissions.screenCapture == .granted else {
@@ -204,8 +237,11 @@ final class AppCoordinator: ObservableObject {
         throw CoordinatorError.microphonePermissionDenied
       }
 
-      let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
-      switch try DiskSpacePolicy.status(for: sessionsDirectory) {
+      let (sessionsDirectory, diskStatus) = try await Task.detached(priority: .userInitiated) {
+        let directory = try SessionRepository.applicationSupportSessionsDirectory()
+        return (directory, try DiskSpacePolicy.status(for: directory))
+      }.value
+      switch diskStatus {
       case .critical:
         throw CoordinatorError.diskSpaceCritical
       case .warning(let availableBytes):
@@ -215,13 +251,28 @@ final class AppCoordinator: ObservableObject {
         break
       }
 
-      let manifestURL = try locateModelManifest()
-      let modelManifest = try ModelManager.loadManifest(from: manifestURL)
-      guard let descriptor = modelManifest.models.first else {
-        throw ModelManagerError.noModels
+      let hosted =
+        transcriptionPreferences.provider == .hosted
+        ? transcriptionPreferences.configuration : nil
+      if let hosted { _ = try hosted.validatedEndpoint() }
+      let modelManifest: ModelManifest?
+      let reference: SessionModelReference
+      let language: String
+      if let hosted {
+        modelManifest = nil
+        reference = SessionModelReference(id: hosted.model, sha256: "")
+        language = hosted.language
+      } else {
+        let local = try ModelManager.loadManifest(from: locateModelManifest())
+        guard let descriptor = local.models.first else { throw ModelManagerError.noModels }
+        modelManifest = local
+        reference = SessionModelReference(id: descriptor.id, sha256: descriptor.sha256)
+        language = descriptor.defaultLanguage
       }
       let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
-      let (manifest, paths) = try await repository.createSession(model: descriptor)
+      let (manifest, paths) = try await repository.createSession(
+        modelReference: reference, language: language, hostedConfiguration: hosted
+      )
       let writer = try DurablePCMWriter(url: paths.mixedPCM)
       var sourceWriters: [AudioSource: DurablePCMWriter] = [:]
       if preserveSeparateTracksEnabled {
@@ -240,7 +291,7 @@ final class AppCoordinator: ObservableObject {
         [weak self] snapshot in
         Task { @MainActor [weak self] in self?.updateMeter(snapshot) }
       }
-      let microphone = MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)
+      let microphone = selectedMicrophone
       activeMicrophoneName = microphone?.name ?? "System default"
 
       let capture = CaptureEngine(
@@ -275,6 +326,7 @@ final class AppCoordinator: ObservableObject {
       startRecordingMonitor()
       Self.logger.info("Recording started")
 
+      guard let modelManifest else { return }
       modelLoadTask = Task { [whisperEngine] in
         let modelDirectory = try Self.locateModelDirectory()
         let manager = ModelManager(manifest: modelManifest)
@@ -300,8 +352,8 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
-  func stopRecording() async {
-    guard case .recording = state,
+  private func stopRecording() async {
+    guard case .finalizing = state,
       let captureEngine,
       let audioPipeline,
       let repository,
@@ -331,13 +383,14 @@ final class AppCoordinator: ObservableObject {
   }
 
   func retryTranscription() {
-    guard canRetryTranscription else { return }
+    guard canRetryTranscription, !isFilePanelOpen, !isModelOperationRunning else { return }
+    state = .finalizing(0)
     Task { await retryCurrentTranscription() }
   }
 
   func retryTranscription(sessionID: UUID) {
     guard !isBusy, let session = storedSession(id: sessionID), let repository else { return }
-    guard Self.isRetryable(session.manifest.status) else { return }
+    guard session.hasAudio, Self.isRetryable(session.manifest.status) else { return }
     manifest = session.manifest
     paths = session.paths
     sessionDirectory = session.paths.directory
@@ -362,7 +415,7 @@ final class AppCoordinator: ObservableObject {
 
   func openTranscript(sessionID: UUID) {
     guard let session = storedSession(id: sessionID) else { return }
-    guard FileManager.default.fileExists(atPath: session.paths.transcriptText.path) else {
+    guard session.hasTranscript else {
       sessionActionNotice = "This session does not have a completed transcript."
       return
     }
@@ -379,32 +432,25 @@ final class AppCoordinator: ObservableObject {
   }
 
   func exportSession(sessionID: UUID) {
-    guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
-    guard FileManager.default.fileExists(atPath: session.paths.transcriptJSON.path) else {
-      sessionActionNotice = "This session does not have transcript files to export."
-      return
-    }
-
-    let panel = NSOpenPanel()
-    panel.title = "Export transcript"
-    panel.message = "Choose a folder for the transcript exports."
-    panel.prompt = "Export"
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
-    panel.canCreateDirectories = true
-    panel.allowsMultipleSelection = false
-    guard panel.runModal() == .OK, let destination = panel.url else { return }
-
+    guard !isBusy, !isFilePanelOpen, let repository,
+      let session = storedSession(id: sessionID), session.hasTranscript
+    else { return }
+    isFilePanelOpen = true
     Task {
+      defer { isFilePanelOpen = false }
+      let panel = NSOpenPanel()
+      panel.title = "Export transcript"
+      panel.message = "Choose a folder for the transcript exports."
+      panel.prompt = "Export"
+      panel.canChooseDirectories = true
+      panel.canChooseFiles = false
+      panel.canCreateDirectories = true
+      panel.allowsMultipleSelection = false
+      guard await panel.begin() == .OK, let destination = panel.url else { return }
       let accessed = destination.startAccessingSecurityScopedResource()
-      defer {
-        if accessed { destination.stopAccessingSecurityScopedResource() }
-      }
+      defer { if accessed { destination.stopAccessingSecurityScopedResource() } }
       do {
-        let exported = try await repository.exportTranscripts(
-          paths: session.paths,
-          to: destination
-        )
+        let exported = try await repository.exportTranscripts(paths: session.paths, to: destination)
         sessionActionNotice = "Exported transcript files."
         NSWorkspace.shared.activateFileViewerSelecting([exported])
       } catch {
@@ -415,10 +461,12 @@ final class AppCoordinator: ObservableObject {
 
   func renameSession(sessionID: UUID, title: String) {
     guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    isSessionOperationRunning = true
     Task {
+      defer { isSessionOperationRunning = false }
       do {
         let renamed = try await repository.renameSession(paths: session.paths, title: title)
-        if FileManager.default.fileExists(atPath: session.paths.transcriptJSON.path) {
+        if session.hasTranscript {
           let store = TranscriptStore()
           let transcript = try await store.load(paths: session.paths)
           try await store.write(transcript, paths: session.paths, title: renamed.title)
@@ -434,7 +482,9 @@ final class AppCoordinator: ObservableObject {
 
   func deleteSessionAudio(sessionID: UUID) {
     guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    isSessionOperationRunning = true
     Task {
+      defer { isSessionOperationRunning = false }
       do {
         try await repository.deleteAudio(paths: session.paths)
         sessionActionNotice = "Deleted retained audio. The transcript was kept."
@@ -447,7 +497,12 @@ final class AppCoordinator: ObservableObject {
 
   func deleteSession(sessionID: UUID) {
     guard !isBusy, let repository, let session = storedSession(id: sessionID) else { return }
+    isSessionOperationRunning = true
     Task {
+      defer {
+        isSessionOperationRunning = false
+        restoreMostRecentDisplayedSession()
+      }
       do {
         try await repository.deleteSession(paths: session.paths)
         if manifest?.id == sessionID {
@@ -458,7 +513,6 @@ final class AppCoordinator: ObservableObject {
         }
         sessionActionNotice = "Deleted session."
         await refreshSessionHistory(using: repository)
-        restoreMostRecentDisplayedSession()
       } catch {
         sessionActionNotice = "Could not delete the session: \(error.localizedDescription)"
       }
@@ -470,7 +524,9 @@ final class AppCoordinator: ObservableObject {
     audioRetentionPolicy = policy
     UserDefaults.standard.set(policy.rawValue, forKey: "audioRetentionPolicy")
     guard let repository else { return }
+    isSessionOperationRunning = true
     Task {
+      defer { isSessionOperationRunning = false }
       await refreshSessionHistory(using: repository, applyingRetention: true)
       sessionActionNotice = "Audio retention updated."
     }
@@ -542,9 +598,11 @@ final class AppCoordinator: ObservableObject {
   }
 
   func verifyInstalledModels() {
-    guard !isBusy else { return }
+    guard !isBusy, !isModelOperationRunning, !isFilePanelOpen else { return }
+    isModelOperationRunning = true
     modelNotice = "Verifying transcription models"
     Task {
+      defer { isModelOperationRunning = false }
       do {
         let modelManifest = try ModelManager.loadManifest(from: locateModelManifest())
         let manager = ModelManager(manifest: modelManifest)
@@ -557,21 +615,34 @@ final class AppCoordinator: ObservableObject {
   }
 
   func refreshMicrophones() {
-    let devices = MicrophoneDeviceRepository.availableDevices()
-    availableMicrophones = devices
-    let defaults = UserDefaults.standard
-    let savedID = defaults.string(forKey: "microphoneDeviceID")
-    if let savedID, devices.contains(where: { $0.id == savedID }) {
-      selectedMicrophoneID = savedID
-    } else {
-      selectedMicrophoneID = nil
-      defaults.removeObject(forKey: "microphoneDeviceID")
+    guard microphoneRefreshTask == nil else { return }
+    microphoneRefreshTask = Task { [weak self] in
+      let (devices, defaultDevice) = await Task.detached(priority: .userInitiated) {
+        (MicrophoneDeviceRepository.availableDevices(), MicrophoneDeviceRepository.defaultDevice())
+      }.value
+      guard let self else { return }
+      defer { self.microphoneRefreshTask = nil }
+      self.availableMicrophones = devices
+      self.defaultMicrophone = defaultDevice
+      // Discovery may complete after recording starts. Do not change its selected input.
+      guard self.captureEngine == nil else { return }
+      let defaults = UserDefaults.standard
+      let savedID = defaults.string(forKey: "microphoneDeviceID")
+      if let savedID, devices.contains(where: { $0.id == savedID }) {
+        self.selectedMicrophoneID = savedID
+      } else {
+        self.selectedMicrophoneID = nil
+        defaults.removeObject(forKey: "microphoneDeviceID")
+      }
+      self.activeMicrophoneName = self.selectedMicrophone?.name ?? "System default"
     }
-    if !isBusy {
-      activeMicrophoneName =
-        MicrophoneDeviceRepository.selectedDevice(savedID: selectedMicrophoneID)?.name
-        ?? "System default"
-    }
+  }
+
+  private var selectedMicrophone: MicrophoneDevice? {
+    MicrophoneDeviceRepository.preferredDevice(
+      savedID: selectedMicrophoneID, devices: availableMicrophones,
+      defaultDevice: defaultMicrophone
+    )
   }
 
   func refreshDisplays(showErrors: Bool = false) async {
@@ -618,7 +689,7 @@ final class AppCoordinator: ObservableObject {
       UserDefaults.standard.removeObject(forKey: "microphoneDeviceID")
     }
     activeMicrophoneName =
-      MicrophoneDeviceRepository.selectedDevice(savedID: id)?.name ?? "System default"
+      selectedMicrophone?.name ?? "System default"
   }
 
   func copyTranscriptToClipboard() {
@@ -626,17 +697,22 @@ final class AppCoordinator: ObservableObject {
       transcriptActionNotice = "The completed transcript is unavailable."
       return
     }
-    do {
-      let transcript = try String(contentsOf: transcriptURL, encoding: .utf8)
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      guard pasteboard.setString(transcript, forType: .string) else {
-        transcriptActionNotice = "Could not copy the transcript."
-        return
+    transcriptActionNotice = "Copying transcript"
+    Task {
+      do {
+        let transcript = try await Task.detached(priority: .userInitiated) {
+          try String(contentsOf: transcriptURL, encoding: .utf8)
+        }.value
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(transcript, forType: .string) else {
+          transcriptActionNotice = "Could not copy the transcript."
+          return
+        }
+        transcriptActionNotice = "Copied transcript to clipboard."
+      } catch {
+        transcriptActionNotice = "Could not read transcript.txt: \(error.localizedDescription)"
       }
-      transcriptActionNotice = "Copied transcript to clipboard."
-    } catch {
-      transcriptActionNotice = "Could not read transcript.txt: \(error.localizedDescription)"
     }
   }
 
@@ -653,21 +729,25 @@ final class AppCoordinator: ObservableObject {
   }
 
   func importModels() {
-    let panel = NSOpenPanel()
-    panel.title = "Choose the verified model folder"
-    panel.message = "Select the folder containing the NB-Whisper and Silero VAD model files."
-    panel.prompt = "Import"
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
-    panel.allowsMultipleSelection = false
-    guard panel.runModal() == .OK, let sourceDirectory = panel.url else { return }
-
-    modelNotice = "Verifying local model files"
+    guard !isBusy, !isModelOperationRunning, !isFilePanelOpen else { return }
+    isFilePanelOpen = true
+    isModelOperationRunning = true
     Task {
-      let accessed = sourceDirectory.startAccessingSecurityScopedResource()
       defer {
-        if accessed { sourceDirectory.stopAccessingSecurityScopedResource() }
+        isFilePanelOpen = false
+        isModelOperationRunning = false
       }
+      let panel = NSOpenPanel()
+      panel.title = "Choose the verified model folder"
+      panel.message = "Select the folder containing the NB-Whisper and Silero VAD model files."
+      panel.prompt = "Import"
+      panel.canChooseDirectories = true
+      panel.canChooseFiles = false
+      panel.allowsMultipleSelection = false
+      guard await panel.begin() == .OK, let sourceDirectory = panel.url else { return }
+      modelNotice = "Verifying local model files"
+      let accessed = sourceDirectory.startAccessingSecurityScopedResource()
+      defer { if accessed { sourceDirectory.stopAccessingSecurityScopedResource() } }
       do {
         let modelManifest = try ModelManager.loadManifest(from: locateModelManifest())
         let manager = ModelManager(manifest: modelManifest)
@@ -677,6 +757,7 @@ final class AppCoordinator: ObservableObject {
           try Self.install(verified.modelURL, in: destination)
           try Self.install(verified.vadURL, in: destination)
         }.value
+        modelLoadTask = nil
         modelNotice = "Verified transcription models installed"
       } catch {
         modelNotice = "Model import failed: \(error.localizedDescription)"
@@ -718,8 +799,14 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func restoreSessionState() async {
+    defer {
+      isRestoringSessions = false
+      refreshMicrophones()
+    }
     do {
-      let sessionsDirectory = try SessionRepository.applicationSupportSessionsDirectory()
+      let sessionsDirectory = try await Task.detached {
+        try SessionRepository.applicationSupportSessionsDirectory()
+      }.value
       let repository = SessionRepository(sessionsDirectory: sessionsDirectory)
       var sessions = try await repository.recoverSessions()
       sessions = try await applyAudioRetention(to: sessions, using: repository)
@@ -729,16 +816,9 @@ final class AppCoordinator: ObservableObject {
       updateSessionHistory(sessions)
 
       guard
-        let recent = sessions.first(where: { session in
-          if session.manifest.status == .completed {
-            return FileManager.default.fileExists(atPath: session.paths.transcriptText.path)
-          }
-          guard Self.isRetryable(session.manifest.status) else { return false }
-          return
-            ((try? SessionRepository.completePCMFrameCount(
-              at: session.paths.mixedPCM,
-              repairTrailingByte: false
-            )) ?? 0) > 0
+        let recent = sessions.first(where: {
+          ($0.manifest.status == .completed && $0.hasTranscript)
+            || (Self.isRetryable($0.manifest.status) && $0.hasAudio)
         })
       else { return }
 
@@ -766,7 +846,7 @@ final class AppCoordinator: ObservableObject {
     applyingRetention: Bool = false
   ) async {
     do {
-      var sessions = try await repository.recoverSessions()
+      var sessions = try await repository.listSessions()
       if applyingRetention {
         sessions = try await applyAudioRetention(to: sessions, using: repository)
       }
@@ -781,12 +861,10 @@ final class AppCoordinator: ObservableObject {
     using repository: SessionRepository
   ) async throws -> [StoredSession] {
     for session in sessions
-    where audioRetentionPolicy.shouldDeleteAudio(for: session.manifest)
-      && FileManager.default.fileExists(atPath: session.paths.mixedPCM.path)
-    {
+    where audioRetentionPolicy.shouldDeleteAudio(for: session.manifest) {
       try await repository.deleteAudio(paths: session.paths)
     }
-    return sessions
+    return try await repository.listSessions()
   }
 
   private func updateSessionHistory(_ sessions: [StoredSession]) {
@@ -798,8 +876,9 @@ final class AppCoordinator: ObservableObject {
         status: session.manifest.status,
         createdAt: session.manifest.createdAt,
         durationFrames: session.manifest.durationFrames,
-        hasTranscript: FileManager.default.fileExists(atPath: session.paths.transcriptText.path),
-        hasAudio: FileManager.default.fileExists(atPath: session.paths.mixedPCM.path)
+        hasTranscript: session.hasTranscript,
+        hasAudio: session.hasAudio,
+        hostedConfiguration: session.manifest.hostedConfiguration
       )
     }
   }
@@ -809,11 +888,11 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func restoreMostRecentDisplayedSession() {
-    guard manifest == nil else { return }
+    guard !isBusy, manifest == nil else { return }
     guard
       let recent = storedSessions.first(where: { session in
         session.manifest.status == .completed
-          && FileManager.default.fileExists(atPath: session.paths.transcriptText.path)
+          && session.hasTranscript
       })
     else { return }
     manifest = recent.manifest
@@ -825,10 +904,9 @@ final class AppCoordinator: ObservableObject {
   private func retryCurrentTranscription() async {
     guard let repository, var manifest, let paths else { return }
     do {
-      let durationFrames = try SessionRepository.completePCMFrameCount(
-        at: paths.mixedPCM,
-        repairTrailingByte: true
-      )
+      let durationFrames = try await Task.detached(priority: .userInitiated) {
+        try SessionRepository.completePCMFrameCount(at: paths.mixedPCM, repairTrailingByte: true)
+      }.value
       guard durationFrames > 0 else { throw CoordinatorError.recordingUnavailable }
       manifest.durationFrames = durationFrames
       if manifest.status == .finalizing {
@@ -858,14 +936,25 @@ final class AppCoordinator: ObservableObject {
       manifest = finalizing
       state = .finalizing(0)
 
-      try await loadWhisperModelIfNeeded()
-      let service = FinalTranscriptionService(engine: whisperEngine)
-      let transcript = try await service.transcribe(
-        pcmURL: paths.mixedPCM,
-        sessionID: finalizing.id,
-        durationFrames: finalizing.durationFrames
-      ) { [weak self] progress in
-        await self?.updateFinalizationProgress(progress)
+      let transcript: Transcript
+      if let configuration = finalizing.hostedConfiguration {
+        // Use the original session destination, never the current preferences on retry.
+        let apiKey = try transcriptionPreferences.apiKey(for: configuration) ?? ""
+        transcript = try await HostedTranscriptionService().transcribe(
+          pcmURL: paths.mixedPCM, sessionID: finalizing.id,
+          durationFrames: finalizing.durationFrames,
+          configuration: configuration, apiKey: apiKey
+        ) { [weak self] progress in
+          await self?.updateFinalizationProgress(progress)
+        }
+      } else {
+        try await loadWhisperModelIfNeeded()
+        transcript = try await FinalTranscriptionService(engine: whisperEngine).transcribe(
+          pcmURL: paths.mixedPCM, sessionID: finalizing.id,
+          durationFrames: finalizing.durationFrames
+        ) { [weak self] progress in
+          await self?.updateFinalizationProgress(progress)
+        }
       }
       try await TranscriptStore().write(transcript, paths: paths, title: finalizing.title)
 
@@ -874,12 +963,12 @@ final class AppCoordinator: ObservableObject {
       try completed.transition(to: .completed)
       try await repository.save(completed, paths: paths)
       manifest = completed
-      state = .completed
       await refreshSessionHistory(using: repository, applyingRetention: true)
-      await sendCompletionNotification(title: completed.title)
       Self.logger.info("Final transcription completed")
       endProtectedActivity()
       clearActiveComponents()
+      state = .completed
+      await sendCompletionNotification(title: completed.title)
     } catch {
       await handleFinalizationFailure(error)
     }
@@ -906,7 +995,7 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func updateMeter(_ snapshot: AudioMeterSnapshot) {
-    meter = snapshot
+    if audioMeter.snapshot != snapshot { audioMeter.snapshot = snapshot }
     let now = Date()
     if snapshot.system > 0.03 { lastSystemSignalAt = now }
     if snapshot.microphone > 0.03 { lastMicrophoneSignalAt = now }
@@ -941,7 +1030,7 @@ final class AppCoordinator: ObservableObject {
     if now.timeIntervalSince(lastSystemSignalAt ?? now) >= 5 {
       warnings.append("No system audio detected")
     }
-    signalWarnings = warnings
+    if signalWarnings != warnings { signalWarnings = warnings }
   }
 
   private func checkpointRecording() async {
@@ -953,10 +1042,16 @@ final class AppCoordinator: ObservableObject {
     else { return }
 
     manifest.durationFrames = await audioPipeline.currentWrittenFrames()
+    guard state == .recording, self.manifest?.id == manifest.id else { return }
     do {
       try await repository.save(manifest, paths: paths)
+      guard state == .recording else { return }
       self.manifest = manifest
-      switch try DiskSpacePolicy.status(for: paths.directory) {
+      let diskStatus = try await Task.detached {
+        try DiskSpacePolicy.status(for: paths.directory)
+      }.value
+      guard state == .recording else { return }
+      switch diskStatus {
       case .critical:
         storageNotice = "Recording stopped because less than 1 GB of disk space remains."
         await interruptRecording(CoordinatorError.diskSpaceCritical, stopCapture: true)
@@ -975,6 +1070,7 @@ final class AppCoordinator: ObservableObject {
 
   private func captureStopped(_ error: Error) {
     guard case .recording = state else { return }
+    state = .finalizing(0)
     Self.logger.error("Capture stream stopped: \(error.localizedDescription, privacy: .public)")
     Task { await interruptRecording(error, stopCapture: false) }
   }
@@ -984,6 +1080,7 @@ final class AppCoordinator: ObservableObject {
       state = .failed(error.localizedDescription)
       return
     }
+    state = .finalizing(0)
     recordingMonitorTask?.cancel()
     recordingMonitorTask = nil
     if stopCapture, let captureEngine { try? await captureEngine.stop() }
@@ -994,10 +1091,10 @@ final class AppCoordinator: ObservableObject {
     try? manifest.transition(to: .interrupted)
     try? await repository.save(manifest, paths: paths)
     self.manifest = manifest
-    state = .failed("Recording interrupted. Audio was preserved.")
     await refreshSessionHistory(using: repository)
     endProtectedActivity()
     clearActiveComponents()
+    state = .failed("Recording interrupted. Audio was preserved.")
   }
 
   private func handleStartFailure(_ error: Error) async {
@@ -1008,11 +1105,12 @@ final class AppCoordinator: ObservableObject {
       manifest.failure = SessionFailure(stage: "start", message: error.localizedDescription)
       try? manifest.transition(to: .failed)
       try? await repository.save(manifest, paths: paths)
+      self.manifest = manifest
     }
-    state = .failed(error.localizedDescription)
     if let repository { await refreshSessionHistory(using: repository) }
     endProtectedActivity()
     clearActiveComponents()
+    state = .failed(error.localizedDescription)
   }
 
   private func handleFinalizationFailure(_ error: Error) async {
@@ -1022,10 +1120,10 @@ final class AppCoordinator: ObservableObject {
       try? await repository.save(manifest, paths: paths)
       self.manifest = manifest
     }
-    state = .failed("Transcription failed. Audio was preserved: \(error.localizedDescription)")
     if let repository { await refreshSessionHistory(using: repository) }
     endProtectedActivity()
     clearActiveComponents()
+    state = .failed("Transcription failed. Audio was preserved: \(error.localizedDescription)")
   }
 
   private func locateModelManifest() throws -> URL {
@@ -1135,7 +1233,7 @@ final class AppCoordinator: ObservableObject {
     captureEngine = nil
     audioPipeline = nil
     modelLoadTask = nil
-    meter = AudioMeterSnapshot(system: 0, microphone: 0)
+    audioMeter.snapshot = AudioMeterSnapshot(system: 0, microphone: 0)
     signalWarnings = []
     lastSystemSignalAt = nil
     lastMicrophoneSignalAt = nil

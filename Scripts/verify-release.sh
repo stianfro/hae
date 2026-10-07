@@ -26,8 +26,9 @@ codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$entitlements")" == "true" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "$entitlements")" == "true" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "$entitlements")" == "true" ]]
-if grep -Eq 'com\.apple\.security\.network\.(client|server)' "$entitlements"; then
-    printf 'Release application contains a network entitlement.\n' >&2
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.network.client' "$entitlements")" == "true" ]]
+if grep -Fq 'com.apple.security.network.server' "$entitlements"; then
+    printf 'Release application contains a network server entitlement.\n' >&2
     exit 1
 fi
 

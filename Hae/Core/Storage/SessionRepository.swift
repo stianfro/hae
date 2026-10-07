@@ -32,10 +32,19 @@ public enum SessionRepositoryError: Error, LocalizedError, Equatable, Sendable {
 public struct StoredSession: Equatable, Sendable {
   public let manifest: SessionManifest
   public let paths: SessionPaths
+  public let hasAudio: Bool
+  public let hasTranscript: Bool
 
-  public init(manifest: SessionManifest, paths: SessionPaths) {
+  public init(
+    manifest: SessionManifest,
+    paths: SessionPaths,
+    hasAudio: Bool = false,
+    hasTranscript: Bool = false
+  ) {
     self.manifest = manifest
     self.paths = paths
+    self.hasAudio = hasAudio
+    self.hasTranscript = hasTranscript
   }
 }
 
@@ -65,6 +74,19 @@ public actor SessionRepository {
   public func createSession(model: WhisperModelDescriptor, now: Date = Date()) throws
     -> (SessionManifest, SessionPaths)
   {
+    try createSession(
+      modelReference: SessionModelReference(id: model.id, sha256: model.sha256),
+      language: model.defaultLanguage,
+      now: now
+    )
+  }
+
+  public func createSession(
+    modelReference: SessionModelReference,
+    language: String,
+    hostedConfiguration: HostedTranscriptionConfiguration? = nil,
+    now: Date = Date()
+  ) throws -> (SessionManifest, SessionPaths) {
     let now = Date(timeIntervalSince1970: floor(now.timeIntervalSince1970))
     let id = UUID()
     let title = Self.defaultTitle(date: now)
@@ -73,8 +95,9 @@ public actor SessionRepository {
       title: title,
       createdAt: now,
       startedAt: now,
-      model: SessionModelReference(id: model.id, sha256: model.sha256),
-      language: model.defaultLanguage
+      model: modelReference,
+      language: language,
+      hostedConfiguration: hostedConfiguration
     )
     let paths = SessionPaths(directory: sessionsDirectory.appendingPathComponent(id.uuidString))
     try FileManager.default.createDirectory(
@@ -95,11 +118,8 @@ public actor SessionRepository {
     return try decoder.decode(SessionManifest.self, from: Data(contentsOf: paths.manifest))
   }
 
-  public func recoverSessions(now: Date = Date()) throws -> [StoredSession] {
-    try FileManager.default.createDirectory(
-      at: sessionsDirectory,
-      withIntermediateDirectories: true
-    )
+  public func listSessions() throws -> [StoredSession] {
+    guard FileManager.default.fileExists(atPath: sessionsDirectory.path) else { return [] }
     let properties: Set<URLResourceKey> = [.isDirectoryKey]
     let directories = try FileManager.default.contentsOfDirectory(
       at: sessionsDirectory,
@@ -114,7 +134,32 @@ public actor SessionRepository {
       else { continue }
 
       let paths = SessionPaths(directory: directory)
-      guard var manifest = try? load(paths: paths) else { continue }
+      guard let manifest = try? load(paths: paths) else { continue }
+      let frameCount =
+        (try? Self.completePCMFrameCount(at: paths.mixedPCM, repairTrailingByte: false)) ?? 0
+      sessions.append(
+        StoredSession(
+          manifest: manifest,
+          paths: paths,
+          hasAudio: frameCount > 0,
+          hasTranscript: FileManager.default.fileExists(atPath: paths.transcriptText.path)
+        )
+      )
+    }
+
+    return sessions.sorted { left, right in
+      left.manifest.createdAt > right.manifest.createdAt
+    }
+  }
+
+  public func recoverSessions(now: Date = Date()) throws -> [StoredSession] {
+    try FileManager.default.createDirectory(
+      at: sessionsDirectory,
+      withIntermediateDirectories: true
+    )
+    return try listSessions().map { session in
+      var manifest = session.manifest
+      let paths = session.paths
       let frameCount = try Self.completePCMFrameCount(at: paths.mixedPCM, repairTrailingByte: true)
 
       switch manifest.status {
@@ -143,11 +188,12 @@ public actor SessionRepository {
       case .completed:
         break
       }
-      sessions.append(StoredSession(manifest: manifest, paths: paths))
-    }
-
-    return sessions.sorted { left, right in
-      left.manifest.createdAt > right.manifest.createdAt
+      return StoredSession(
+        manifest: manifest,
+        paths: paths,
+        hasAudio: frameCount > 0,
+        hasTranscript: session.hasTranscript
+      )
     }
   }
 

@@ -82,7 +82,7 @@ confirms the two-source capture, mixing, and final transcription path. The
   contain no `<|nocaptions|>` or other Whisper control tokens.
 - Confirm recording is refused below 1 GB free and warns below 3 GB free using
   an isolated test volume. Do not fill the system volume to test this.
-- Disable network access and repeat the complete workflow.
+- Disable network access and repeat the complete on-device workflow.
 
 ## History and retention checks
 
@@ -98,3 +98,32 @@ confirms the two-source capture, mixing, and final transcription path. The
 - Enable separate source tracks and confirm both files match the mixed file's
   duration and timeline.
 - Select each connected display and confirm system audio remains captured.
+
+
+## Hosted transcription and settings
+
+- Open Settings from the tray and Command+,. It must remain usable after the
+  popover closes; reopening must focus the existing window, not create duplicates.
+- Switch tabs, edit fields, cancel/reopen file panels, and open history menus
+  during recording. Meter updates must not interrupt these interactions.
+- Click Start, Stop, and Retry rapidly. Only one operation should start, and a
+  new recording must not be cleared by an earlier operation's cleanup.
+- Confirm first launch and old session manifests remain on-device. Save hosted
+  settings and verify a new session records without installed local model files.
+- With an authorized test endpoint, upload a short consented recording. Verify
+  the model, language, transcript exports, JSON coarse timing, and verbose JSON
+  segment timing. Test a recording over five minutes for chunk continuity.
+- Test wrong key, unsupported model, offline mode, server error, redirect, and
+  malformed response. Audio must remain local and retryable, with no fallback.
+- Verify changing new-recording settings does not redirect an existing retry.
+  The active badge and history must correctly disclose hosted sessions.
+- Replace/remove a key, change endpoints, and reopen the app. Keys must not
+  appear in UserDefaults, session JSON, exports, or logs. Use a signed build to
+  check actual Keychain access; unit tests inject an in-memory credential store.
+- Confirm local mode completes with networking disabled. Hosted mode requires
+  a network connection and a compatible audio API, not just a text chat API.
+
+Automated tests cover request encoding, WAV headers, chunk offsets, response
+parsing, errors, cancellation, redirect refusal, preferences, and read-only
+history. They do not establish compatibility with a particular live provider
+or replace the signed macOS permission and UI checks above.

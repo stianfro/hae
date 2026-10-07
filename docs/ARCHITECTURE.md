@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    UI["MenuBarExtra"] --> Coordinator["AppCoordinator"]
+    UI["MenuBarExtra + Settings window"] --> Coordinator["AppCoordinator"]
     Coordinator --> Capture["CaptureEngine"]
     Capture --> System["System callback queue"]
     Capture --> Microphone["Microphone callback queue"]
@@ -16,6 +16,7 @@ flowchart LR
     Mixer --> PCM["Append-only PCM writer"]
     PCM --> Final["Bounded final transcription"]
     Final --> Whisper["WhisperEngine actor"]
+    Final --> Hosted["Optional HTTPS audio transcription API"]
     Final --> Exports["JSON, Markdown, text, SRT"]
 ```
 
@@ -43,13 +44,21 @@ gaps.
 
 ## Final transcription
 
-The final service reads at most 28 seconds of PCM at a time with a 10 percent
+The local final service reads at most 28 seconds of PCM at a time with a 10 percent
 overlap. The Whisper context is owned by one Swift actor. Overlap text is
 deduplicated by bounded suffix and prefix token comparison. Transcript output is
 written through temporary files followed by atomic replacement.
 
 Whisper control tokens such as `<|nocaptions|>` are removed before transcript
 segments are stored.
+
+Hosted sessions instead read five-minute PCM chunks and send multipart WAV to
+`audio/transcriptions`. A generic URL/model/language configuration is captured
+in the session manifest; credentials are read from the endpoint's Keychain
+entry at transcription time. The transport rejects redirects, uses ephemeral
+network storage, and reports sanitized errors. JSON text responses get coarse
+chunk timing; verbose JSON segments preserve server timing within each chunk.
+There is no provider fallback and no chat-completions transcription path.
 
 ## Recovery and retry
 
@@ -59,7 +68,10 @@ from the durable PCM file. An incomplete trailing Int16 byte is removed. A
 manifest left in `finalizing` is also changed to `interrupted`. Captured,
 interrupted, and failed sessions with usable audio can be transcribed again
 from the menu. Retry recreates all transcript exports atomically from the mixed
-PCM source.
+PCM source. Recovery runs only at startup, before recording is enabled. Normal
+history refreshes use read-only listings and cannot mark an active session as
+interrupted. Listings include cached audio/transcript availability so SwiftUI
+rendering does not repeatedly probe the filesystem.
 
 Sleep, logout, ScreenCaptureKit failure, and critical disk space close the
 audio pipeline and preserve the session as interrupted when the process has
@@ -78,6 +90,12 @@ Audio retention defaults to seven days and is applied only to completed
 sessions. It never removes transcripts or audio needed for retry. Optional
 system and microphone source tracks share the mixed recording timeline and are
 covered by the same retention action.
+
+Settings use a separate named window that can be reopened from the tray or
+with Command+,. Meter snapshots have their own observable model, so audio
+levels do not invalidate the history and settings trees. Device discovery,
+transcript reads, and disk checks run off MainActor; file panels are asynchronous.
+Recorder actions reserve state synchronously to reject rapid duplicate clicks.
 
 Microphone, capture display, source gains, source-track retention, launch at
 login, completion notification, and idle-sleep settings are persisted locally.

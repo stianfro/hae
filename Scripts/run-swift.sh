@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# SwiftUI macro plugins ship with full Xcode, not every Command Line Tools SDK.
+if [[ -z "${DEVELOPER_DIR:-}" && -z "${SDKROOT:-}" && -d /Applications/Xcode.app ]]; then
+    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${1:-test}"
+if [[ $# -gt 0 ]]; then shift; fi
 scratch="$root/.cache/swiftpm"
 module_cache="$root/.cache/clang"
 local_home="$root/.cache/home"
@@ -28,7 +34,7 @@ EOF
     export SWIFT_EXEC="$wrapper"
 fi
 
-common=(--disable-sandbox --scratch-path "$scratch")
+common=(--disable-sandbox --scratch-path "$scratch" --sdk "$sdk")
 if [[ "$mode" == "build" ]]; then
     swift build "${common[@]}" --target HaeApplication
     exit
@@ -38,16 +44,16 @@ if [[ "$mode" != "test" ]]; then
     exit 1
 fi
 
-developer_root="$(xcode-select -p)"
+developer_root="${DEVELOPER_DIR:-$(xcode-select -p)}"
 developer_frameworks="$developer_root/Library/Developer/Frameworks"
 if [[ ! -d "$developer_frameworks/Testing.framework" ]]; then
-    swift test "${common[@]}"
+    swift test "${common[@]}" "$@"
     exit
 fi
 
 testing_plugin="$developer_root/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib"
 testing_interop="$developer_root/Library/Developer/usr/lib"
-swift test "${common[@]}" \
+swift test "${common[@]}" "$@" \
     -Xswiftc -F -Xswiftc "$developer_frameworks" \
     -Xswiftc -load-plugin-library -Xswiftc "$testing_plugin" \
     -Xlinker "-F$developer_frameworks" \

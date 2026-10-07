@@ -26,6 +26,11 @@ let package = Package(
       dependencies: ["HaeCore"],
       path: "Tests/Unit"
     ),
+    .testTarget(
+      name: "HaeApplicationTests",
+      dependencies: ["HaeApplication", "HaeCore"],
+      path: "Tests/App"
+    ),
     .executableTarget(
       name: "HaeApplication",
       dependencies: ["HaeCore"],

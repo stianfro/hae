@@ -1,16 +1,19 @@
 # Hæ?
 
-Hæ? is a native macOS menu-bar recorder and local meeting transcription app.
+Hæ? is a native macOS menu-bar recorder with on-device or hosted meeting
+transcription.
 It captures system audio and microphone audio from one ScreenCaptureKit stream,
 mixes both sources on their presentation timeline, writes crash-tolerant 16 kHz
-mono PCM, then transcribes the durable file in-process with whisper.cpp.
+mono PCM, then transcribes the durable file with whisper.cpp on your Mac or a
+hosted audio API you choose.
 
 The application records and transcribes automatically, keeps local session
 history, recovers interrupted recordings, retries failed transcription, and
-exports JSON, Markdown, text, and SRT. It intentionally has no cloud service,
-network entitlement, virtual audio driver, Python runtime, or background
-server. Live draft transcription remains deferred until the durable recorder
-and final transcription path finish their release test matrix.
+exports JSON, Markdown, text, and SRT. On-device transcription is the default;
+hosted transcription is opt-in. There is no telemetry, virtual audio driver,
+Python runtime, or background server. Live draft transcription remains deferred.
+Settings open in a separate window, leaving the menu focused on recording and
+recent sessions.
 
 ## Requirements
 
@@ -34,10 +37,43 @@ open Hae.xcodeproj
 repositories and rejects any file whose SHA-256 does not match the pinned
 manifest. `LocalModels/` and the built XCFramework are ignored by Git.
 
-For Debug runs, choose **Import models** in the menu and select `LocalModels`.
+For on-device Debug runs, open **Settings > Transcription > Import models** and
+select `LocalModels`.
 The app verifies both hashes and copies the files once into its sandboxed
 application support directory. Release packaging puts verified models inside
-the app bundle.
+the app bundle. Hosted transcription does not require importing local models.
+
+## Hosted transcription
+
+Open **Settings** from the menu bar, or press **Command+,** while Hæ? is active.
+In **Transcription**, choose **Hosted server**, enter your HTTPS API base URL
+(for example `https://inference.example.com/v1`) and the exact speech-to-text
+model ID from your provider, then save. API keys are optional for servers that
+do not require authentication; saved keys live in macOS Keychain, scoped to the
+endpoint, not in preferences or session files.
+
+The server must implement OpenAI-compatible `POST /audio/transcriptions` with
+multipart WAV uploads. Whisper-family speech-to-text models are suitable.
+Embedding models and text-only chat models are not substitutes. A working
+`/chat/completions` endpoint alone does not establish audio API compatibility.
+
+- **JSON** is the compatibility default. Text-only responses receive one coarse
+  timestamp interval per upload chunk, not sentence-level subtitle timings.
+- **Verbose JSON** uses the server's segment timestamps when available.
+- Leave language blank for detection, or enter a two-letter language code.
+- After recording stops, mixed audio is uploaded in chunks of up to five minutes
+  (about 9.6 MB each). This bounds upload memory, but words at chunk boundaries
+  may be split. The durable local recording stays available if a request fails.
+- HTTPS is required. Redirects are rejected, and server error bodies are not
+  shown or logged. There is no automatic switch between local and hosted modes.
+- New settings apply to new recordings. Retries use the original session's
+  destination and model, with the currently saved key for that endpoint.
+  Existing sessions remain on-device, even after hosted mode is enabled.
+
+Only enable hosted mode for a server you trust and with permission to send the
+recording. Local retention settings do not control copies held by your provider.
+Provider-specific compatibility must be checked with its audio API docs or a
+short recording you have permission to upload.
 
 ## Development tasks
 
@@ -46,13 +82,16 @@ just format
 just lint
 just test
 just build
+just build-app
 just smoke-model
 just ci
 ```
 
 All development tasks are exposed through the `justfile`. SwiftPM builds the
 core and menu-bar source for quick local verification. The Xcode project builds
-the signed `.app` and links the generated whisper XCFramework.
+the signed `.app` and links the generated whisper XCFramework. `just build-app`
+checks the native Xcode target without signing, using local `.cache/` build data.
+Use `just test-filter <pattern>` for focused tests.
 
 `just smoke-model` builds a temporary CPU-only whisper.cpp runner under
 `.cache/`, checks the pinned model and VAD with the upstream audio fixture, then
