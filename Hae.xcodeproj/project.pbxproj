@@ -6,6 +6,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D11000000000000000000001 /* DiagnosticEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12000000000000000000001 /* DiagnosticEvent.swift */; };
+		D11000000000000000000002 /* DiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12000000000000000000002 /* DiagnosticLog.swift */; };
+		D11000000000000000000003 /* DiagnosticsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12000000000000000000003 /* DiagnosticsController.swift */; };
 		15CC848F7337765982AA1FC0 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63560B5A635E68BB45023041 /* AppCoordinator.swift */; };
 		156A56D8CC793D83E78EC543 /* HaeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA2B33C5BFBA8796916FBC5E /* HaeApp.swift */; };
 		D3C2156EB7529104A5490854 /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF2BD9D8FB70C984DEEDFA1 /* AudioLevelMeter.swift */; };
@@ -61,6 +64,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D12000000000000000000001 /* DiagnosticEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Diagnostics/DiagnosticEvent.swift; sourceTree = SOURCE_ROOT; };
+		D12000000000000000000002 /* DiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Diagnostics/DiagnosticLog.swift; sourceTree = SOURCE_ROOT; };
+		D12000000000000000000003 /* DiagnosticsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/App/DiagnosticsController.swift; sourceTree = SOURCE_ROOT; };
 		63560B5A635E68BB45023041 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/App/AppCoordinator.swift; sourceTree = SOURCE_ROOT; };
 		EA2B33C5BFBA8796916FBC5E /* HaeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/App/HaeApp.swift; sourceTree = SOURCE_ROOT; };
 		CEF2BD9D8FB70C984DEEDFA1 /* AudioLevelMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hae/Core/Audio/AudioLevelMeter.swift; sourceTree = SOURCE_ROOT; };
@@ -148,6 +154,9 @@
 				0E2E1DC5F037C18E619C5F37 /* SettingsView.swift */,
 				6187C0BC83B30B2255369AD8 /* HostedTranscriptionConfiguration.swift */,
 				9234813354E0872EA910122B /* HostedTranscriptionService.swift */,
+				D12000000000000000000001 /* DiagnosticEvent.swift */,
+				D12000000000000000000002 /* DiagnosticLog.swift */,
+				D12000000000000000000003 /* DiagnosticsController.swift */,
 			); name = Hae; sourceTree = "<group>"; };
 		B906EB298B3478841B2D660B /* Frameworks */ = {isa = PBXGroup; children = (45AD4CC962476B5EB34F853D /* whisper.xcframework */, ); name = Frameworks; sourceTree = "<group>"; };
 		7168E62E5CDB0DF79ADF5742 /* Products */ = {isa = PBXGroup; children = (D957E19B16B69713B7749A90 /* Hae.app */, ); name = Products; sourceTree = "<group>"; };
@@ -173,6 +182,9 @@
 /* Begin PBXSourcesBuildPhase section */
 		F612CD2E22E187AC48B5913C /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 				2981A7A85CB5671A26734051 /* HostedTranscriptionService.swift in Sources */,
+				D11000000000000000000001 /* DiagnosticEvent.swift in Sources */,
+				D11000000000000000000002 /* DiagnosticLog.swift in Sources */,
+				D11000000000000000000003 /* DiagnosticsController.swift in Sources */,
 				0635E7A78F9DACA1852BE8E7 /* HostedTranscriptionConfiguration.swift in Sources */,
 				E955F717E3E28B41EC187728 /* SettingsView.swift in Sources */,
 				6EC697B12782EF0989FC9E29 /* TranscriptionPreferences.swift in Sources */,

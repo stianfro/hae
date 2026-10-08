@@ -8,6 +8,26 @@ import Testing
 @Suite
 @MainActor
 struct MenuStateTests {
+  @Test
+  func failureDetailsPreserveTheFullMessage() {
+    let message = "The hosted endpoint rejected access (HTTP 401). Check the saved API key."
+    #expect(ApplicationState.failed(message).failureMessage == message)
+    #expect(ApplicationState.idle.failureMessage == nil)
+    #expect(ApplicationState.completed.failureMessage == nil)
+  }
+
+  @Test
+  func recoveryPreservesSavedFailureDetails() {
+    var manifest = SessionManifest(
+      title: "Test", status: .failed, model: SessionModelReference(id: "test", sha256: ""))
+    manifest.failure = SessionFailure(stage: "transcription", message: "HTTP 403: access rejected.")
+    #expect(ApplicationState.recoveredSession(manifest).failureMessage == manifest.failure?.message)
+    manifest.failure = nil
+    #expect(
+      ApplicationState.recoveredSession(manifest).failureMessage
+        == "Recording recovered. Transcription can be retried.")
+  }
+
   @Test(arguments: [SessionStatus.captured, .finalizing, .interrupted, .failed])
   func unfinishedSessionsRequireUsableAudioForRetry(status: SessionStatus) {
     #expect(item(status: status, hasAudio: true).canRetryTranscription)

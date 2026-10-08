@@ -120,9 +120,11 @@ struct HostedTranscriptionTests {
     var config = configuration
     config.responseFormat = .verboseJSON
     let progress = HostedProgressRecorder()
+    let diagnostics = HostedDiagnosticRecorder()
     let result = try await HostedTranscriptionService(transport: transport).transcribe(
       pcmURL: file, sessionID: UUID(), durationFrames: Int64(frames),
-      configuration: config, apiKey: "test-key", progress: { await progress.record($0) }
+      configuration: config, apiKey: "test-key",
+      diagnostic: { await diagnostics.record($0) }, progress: { await progress.record($0) }
     )
     #expect(result.segments.map(\.startMs) == [1_250, 300_200])
     #expect(result.segments.map(\.endMs) == [2_500, 300_800])
@@ -138,6 +140,21 @@ struct HostedTranscriptionTests {
       #expect(readUInt32(body, at: waveStart + 40) == UInt32(expectedBytes))
     }
     #expect(await progress.values == [300.0 / 301.0, 1])
+    let events = await diagnostics.events
+    #expect(
+      events.map(\.kind) == [
+        .hostedRequestStarted, .hostedResponseReceived, .hostedRequestStarted,
+        .hostedResponseReceived,
+      ])
+    #expect(events.map(\.chunk) == [1, 1, 2, 2])
+    #expect(events.allSatisfy { $0.chunkCount == 2 })
+    #expect(Set(events.compactMap(\.operationID)).count == 1)
+    #expect(events.map(\.audioBytes) == [9_600_000, 9_600_000, 32_000, 32_000])
+    #expect(events.map(\.audioDurationMS) == [300_000, 300_000, 1_000, 1_000])
+    #expect(events.allSatisfy { $0.hasAPIKey == true && $0.responseFormat == .verboseJSON })
+    #expect(events.allSatisfy { $0.elapsedMS.map { $0 >= 0 } == true })
+    #expect(events.map(\.statusCode) == [nil, 200, nil, 200])
+    #expect(events.allSatisfy { $0.failure == nil })
   }
 
   @Test
@@ -187,6 +204,8 @@ struct HostedTranscriptionTests {
     }
     #expect(await transport.requests.count == 1)
     #expect(!HostedTranscriptionError.httpStatus(status).localizedDescription.contains("secret"))
+    #expect(
+      HostedTranscriptionError.httpStatus(status).localizedDescription.contains("HTTP \(status)"))
   }
 
   @Test(arguments: [
@@ -291,7 +310,10 @@ struct HostedTranscriptionTests {
     defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
     for (code, error) in [
       (URLError.Code.timedOut, HostedTranscriptionError.timedOut),
-      (URLError.Code.notConnectedToInternet, HostedTranscriptionError.networkFailure),
+      (
+        URLError.Code.notConnectedToInternet,
+        HostedTranscriptionError.networkFailureCode(URLError.Code.notConnectedToInternet.rawValue)
+      ),
     ] {
       let transport = HostedStubTransport(replies: [.network(code)])
       await #expect(throws: error) {
@@ -308,16 +330,22 @@ struct HostedTranscriptionTests {
     let file = try temporaryPCM(Data([0, 0]))
     defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
     let transport = HostedStubTransport(replies: [], suspends: true)
+    let diagnostics = HostedDiagnosticRecorder()
     let task = Task {
       try await HostedTranscriptionService(transport: transport).transcribe(
         pcmURL: file, sessionID: UUID(), durationFrames: 1,
-        configuration: configuration, apiKey: "test-key", progress: { _ in }
+        configuration: configuration, apiKey: "test-key",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
       )
     }
     await transport.waitForRequest()
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
     #expect(await transport.requests.count == 1)
+    let events = await diagnostics.events
+    #expect(events.map(\.kind) == [.hostedRequestStarted, .hostedRequestFailed])
+    #expect(events.last?.failure == .cancelled)
+    #expect(events.last?.statusCode == nil)
   }
 
   @Test
@@ -339,6 +367,141 @@ struct HostedTranscriptionTests {
     #expect(redirected == nil)
   }
 
+  @Test(arguments: [false, true])
+  func recordsHTTPFailureAndAuthenticationPresenceWithoutSecrets(hasKey: Bool) async throws {
+    let file = try temporaryPCM(Data([0, 0]))
+    defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+    let transport = HostedStubTransport(replies: [.http(401, "server-payload-private-transcript")])
+    let diagnostics = HostedDiagnosticRecorder()
+    var config = configuration
+    config.baseURL = "https://private-server.example.com/private-tenant/v1"
+    config.model = "private-model-name"
+    let sessionID = UUID()
+    await #expect(throws: HostedTranscriptionError.httpStatus(401)) {
+      try await HostedTranscriptionService(transport: transport).transcribe(
+        pcmURL: file, sessionID: sessionID, durationFrames: 1,
+        configuration: config, apiKey: hasKey ? "secret-api-key" : "",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
+      )
+    }
+    let events = await diagnostics.events
+    #expect(
+      events.map(\.kind) == [
+        .hostedRequestStarted, .hostedResponseReceived, .hostedRequestFailed,
+      ])
+    #expect(events.allSatisfy { $0.hasAPIKey == hasKey })
+    #expect(events.last?.statusCode == 401)
+    #expect(events.last?.failure == .http)
+    #expect(events.last?.chunk == 1 && events.last?.chunkCount == 1)
+    let encoded = try JSONEncoder().encode(events)
+    let json = String(decoding: encoded, as: UTF8.self)
+    for secret in [
+      config.baseURL, "private-server", "private-tenant", config.model, "secret-api-key",
+      "server-payload-private-transcript", file.path, file.lastPathComponent, sessionID.uuidString,
+    ] {
+      #expect(!json.contains(secret))
+    }
+    let decoded = try JSONDecoder().decode([DiagnosticEvent].self, from: encoded)
+    #expect(decoded.map(\.kind) == events.map(\.kind))
+  }
+
+  @Test(arguments: [URLError.Code.cannotFindHost, .notConnectedToInternet, .secureConnectionFailed])
+  func preservesNumericNetworkFailuresWithoutUnderlyingDescription(code: URLError.Code) async throws
+  {
+    let file = try temporaryPCM(Data([0, 0]))
+    defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+    let transport = HostedStubTransport(replies: [.network(code)])
+    let diagnostics = HostedDiagnosticRecorder()
+    let expected = HostedTranscriptionError.networkFailureCode(code.rawValue)
+    await #expect(throws: expected) {
+      try await HostedTranscriptionService(transport: transport).transcribe(
+        pcmURL: file, sessionID: UUID(), durationFrames: 1,
+        configuration: configuration, apiKey: "test-key",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
+      )
+    }
+    let events = await diagnostics.events
+    #expect(events.map(\.kind) == [.hostedRequestStarted, .hostedRequestFailed])
+    #expect(events.last?.networkCode == code.rawValue)
+    #expect(events.last?.failure == .network)
+    #expect(events.last?.statusCode == nil)
+    #expect(expected.localizedDescription.contains("network error \(code.rawValue)"))
+    #expect(!expected.localizedDescription.contains("private-network-error"))
+    let serialized = String(decoding: try JSONEncoder().encode(events), as: UTF8.self)
+    #expect(!serialized.contains("private-network-error"))
+  }
+
+  @Test
+  func recordsTimeoutCategoryAndNumericCode() async throws {
+    let file = try temporaryPCM(Data([0, 0]))
+    defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+    let transport = HostedStubTransport(replies: [.network(.timedOut)])
+    let diagnostics = HostedDiagnosticRecorder()
+    await #expect(throws: HostedTranscriptionError.timedOut) {
+      try await HostedTranscriptionService(transport: transport).transcribe(
+        pcmURL: file, sessionID: UUID(), durationFrames: 1,
+        configuration: configuration, apiKey: "test-key",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
+      )
+    }
+    let events = await diagnostics.events
+    #expect(events.map(\.kind) == [.hostedRequestStarted, .hostedRequestFailed])
+    #expect(events.last?.failure == .timeout)
+    #expect(events.last?.networkCode == URLError.Code.timedOut.rawValue)
+  }
+
+  @Test
+  func recordsTransportCancellationCode() async throws {
+    let file = try temporaryPCM(Data([0, 0]))
+    defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+    let transport = HostedStubTransport(replies: [.network(.cancelled)])
+    let diagnostics = HostedDiagnosticRecorder()
+    await #expect(throws: CancellationError.self) {
+      try await HostedTranscriptionService(transport: transport).transcribe(
+        pcmURL: file, sessionID: UUID(), durationFrames: 1,
+        configuration: configuration, apiKey: "test-key",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
+      )
+    }
+    let events = await diagnostics.events
+    #expect(events.map(\.kind) == [.hostedRequestStarted, .hostedRequestFailed])
+    #expect(events.last?.failure == .cancelled)
+    #expect(events.last?.networkCode == URLError.Code.cancelled.rawValue)
+  }
+
+  @Test
+  func recordsResponseFailureWithoutResponseContent() async throws {
+    let file = try temporaryPCM(Data([0, 0]))
+    defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+    let body = "private-invalid-response"
+    let transport = HostedStubTransport(replies: [.http(200, body)])
+    let diagnostics = HostedDiagnosticRecorder()
+    await #expect(throws: HostedTranscriptionError.invalidResponse) {
+      try await HostedTranscriptionService(transport: transport).transcribe(
+        pcmURL: file, sessionID: UUID(), durationFrames: 1,
+        configuration: configuration, apiKey: "test-key",
+        diagnostic: { await diagnostics.record($0) }, progress: { _ in }
+      )
+    }
+    let events = await diagnostics.events
+    #expect(
+      events.map(\.kind) == [
+        .hostedRequestStarted, .hostedResponseReceived, .hostedRequestFailed,
+      ])
+    #expect(events.last?.failure == .invalidResponse)
+    #expect(events.last?.statusCode == 200)
+    #expect(events.last?.responseBytes == body.utf8.count)
+    let serialized = String(decoding: try JSONEncoder().encode(events), as: UTF8.self)
+    #expect(!serialized.contains(body))
+  }
+
+  @Test
+  func unknownNetworkCodeUsesSafeGenericDescription() {
+    let error = HostedTranscriptionError.networkFailureCode(-999_999)
+    #expect(error.localizedDescription.contains("network error -999999"))
+    #expect(error.localizedDescription.contains("Check the endpoint and network connection"))
+  }
+
   private func temporaryPCM(_ data: Data) throws -> URL {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -357,6 +520,14 @@ private actor HostedProgressRecorder {
 
   func record(_ value: Double) {
     values.append(value)
+  }
+}
+
+private actor HostedDiagnosticRecorder {
+  var events: [DiagnosticEvent] = []
+
+  func record(_ event: DiagnosticEvent) {
+    events.append(event)
   }
 }
 
@@ -398,7 +569,7 @@ private actor HostedStubTransport: HostedTranscriptionTransport {
       )
       return (Data(body.utf8), response)
     case .network(let code):
-      throw URLError(code)
+      throw URLError(code, userInfo: [NSLocalizedDescriptionKey: "private-network-error"])
     }
   }
 }

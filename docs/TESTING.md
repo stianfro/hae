@@ -102,6 +102,22 @@ confirms the two-source capture, mixing, and final transcription path. The
 
 ## Hosted transcription and settings
 
+- With debug logging disabled, retry a failed hosted session. The full error
+  must be readable and copyable in the tray, including any HTTP status. Quit
+  and reopen Hæ, and confirm the saved failure is still visible. The history
+  item's Show error details action must show it too.
+- In Settings > Diagnostics, enable Debug logging and retry. Export the log
+  and check for ordered request-start, response, and failure/success events.
+  Confirm chunk number, timing, HTTP status, and API-key-present metadata are
+  accurate. Never test with recordings you lack permission to upload.
+- Check an exported log for accidental inclusion of the API key, URL, model
+  name, audio, transcript, session title, headers, or raw response body. None
+  should be present. Disabling logging must stop new entries. Clearing the log
+  must not remove or modify recordings, saved credentials, or settings.
+- Repeat export and clear after restarting the app. Canceling the save panel
+  must not export a file or leave the controls disabled. Test an unwritable
+  destination and confirm a useful notice appears without breaking recording.
+
 - Before granting Screen Recording access, open and close the tray, open
   Settings, and refresh audio sources several times. None of these passive
   actions should show an OS capture-permission prompt. Display discovery reads

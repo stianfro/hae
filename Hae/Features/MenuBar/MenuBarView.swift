@@ -14,6 +14,7 @@ struct MenuBarView: View {
   @State private var renameTitle = ""
   @State private var deleteTarget: SessionListItem?
   @State private var deleteAudioTarget: SessionListItem?
+  @State private var historyFailureMessage: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -28,6 +29,10 @@ struct MenuBarView: View {
             .foregroundStyle(.secondary)
         }
         Spacer()
+      }
+
+      if let message = coordinator.state.failureMessage {
+        FailureDetailsView(message: message)
       }
 
       Picker(
@@ -140,6 +145,7 @@ struct MenuBarView: View {
                   retry: { coordinator.retryTranscription(sessionID: session.id) },
                   export: { coordinator.exportSession(sessionID: session.id) },
                   reveal: { coordinator.revealSession(sessionID: session.id) },
+                  showFailure: { historyFailureMessage = session.failure?.message },
                   rename: {
                     renameTarget = session
                     renameTitle = session.title
@@ -188,6 +194,20 @@ struct MenuBarView: View {
     .padding(16)
     .frame(width: 380)
     .onAppear { coordinator.refreshMicrophones() }
+    .sheet(
+      isPresented: Binding(
+        get: { historyFailureMessage != nil },
+        set: { if !$0 { historyFailureMessage = nil } }
+      )
+    ) {
+      VStack(alignment: .leading, spacing: 16) {
+        FailureDetailsView(message: historyFailureMessage ?? "")
+        Button("Done") { historyFailureMessage = nil }
+          .keyboardShortcut(.defaultAction)
+      }
+      .padding(20)
+      .frame(width: 500)
+    }
     .alert("Quit Hæ?", isPresented: $showQuitConfirmation) {
       Button("Keep running", role: .cancel) {}
       Button("Quit", role: .destructive) { NSApplication.shared.terminate(nil) }
@@ -286,6 +306,7 @@ private struct SessionHistoryRow: View {
   let retry: () -> Void
   let export: () -> Void
   let reveal: () -> Void
+  let showFailure: () -> Void
   let rename: () -> Void
   let deleteAudio: () -> Void
   let delete: () -> Void
@@ -317,6 +338,9 @@ private struct SessionHistoryRow: View {
       .disabled(!session.hasTranscript)
 
       Menu {
+        if session.failure != nil {
+          Button("Show error details", action: showFailure)
+        }
         Button("Open transcript", action: open)
           .disabled(!session.hasTranscript)
         if session.canRetryTranscription {
@@ -346,6 +370,40 @@ private struct SessionHistoryRow: View {
     }
     .padding(8)
     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+  }
+}
+
+private struct FailureDetailsView: View {
+  let message: String
+  @State private var copied = false
+
+  var body: some View {
+    GroupBox {
+      VStack(alignment: .leading, spacing: 8) {
+        ScrollView {
+          Text(message)
+            .font(.caption)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 110)
+        Button(copied ? "Copied" : "Copy error details") {
+          NSPasteboard.general.clearContents()
+          copied = NSPasteboard.general.setString(message, forType: .string)
+        }
+        .font(.caption)
+        Text("For debug logs, enable Settings > Diagnostics before retrying.")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } label: {
+      Label("Error details", systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.orange)
+    }
+    .onChange(of: message) { copied = false }
   }
 }
 
