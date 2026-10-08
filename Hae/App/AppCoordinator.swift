@@ -15,6 +15,16 @@ enum ApplicationState: Equatable {
   case finalizing(Double)
   case completed
   case failed(String)
+
+  var failureMessage: String? {
+    guard case .failed(let message) = self else { return nil }
+    return message
+  }
+
+  static func recoveredSession(_ manifest: SessionManifest) -> Self {
+    let message = manifest.failure?.message ?? "Recording recovered. Transcription can be retried."
+    return .failed(message)
+  }
 }
 
 struct SessionListItem: Identifiable, Equatable {
@@ -26,6 +36,7 @@ struct SessionListItem: Identifiable, Equatable {
   let hasTranscript: Bool
   let hasAudio: Bool
   let hostedConfiguration: HostedTranscriptionConfiguration?
+  var failure: SessionFailure? = nil
 
   var canRetryTranscription: Bool {
     hasAudio && status != .completed && status != .recording
@@ -70,6 +81,7 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var state: ApplicationState = .idle
   let audioMeter = AudioMeterModel()
   let transcriptionPreferences = TranscriptionPreferences()
+  let diagnostics = DiagnosticsController()
   @Published private(set) var isRestoringSessions = true
   @Published private(set) var isModelOperationRunning = false
   @Published private(set) var isFilePanelOpen = false
@@ -172,8 +184,8 @@ final class AppCoordinator: ObservableObject {
       "Transcribing, \(Int(progress * 100))%"
     case .completed:
       "Transcript complete"
-    case .failed(let message):
-      message
+    case .failed:
+      "Needs attention"
     }
   }
 
@@ -325,6 +337,7 @@ final class AppCoordinator: ObservableObject {
       lastMicrophoneSignalAt = now
       startRecordingMonitor()
       Self.logger.info("Recording started")
+      Task { await diagnostics.record(DiagnosticEvent(kind: .recordingStarted)) }
 
       guard let modelManifest else { return }
       modelLoadTask = Task { [whisperEngine] in
@@ -376,6 +389,8 @@ final class AppCoordinator: ObservableObject {
       try await repository.save(manifest, paths: paths)
       self.manifest = manifest
       Self.logger.info("Durable capture closed with \(durationFrames) frames")
+      await diagnostics.record(
+        DiagnosticEvent(kind: .recordingStopped, audioDurationMS: Int(durationFrames / 16)))
       await finalizeSession(manifest, repository: repository, paths: paths)
     } catch {
       await interruptRecording(error, stopCapture: false)
@@ -826,7 +841,7 @@ final class AppCoordinator: ObservableObject {
         manifest = recent.manifest
         paths = recent.paths
         sessionDirectory = recent.paths.directory
-        state = .failed("Recording recovered. Transcription can be retried.")
+        state = .recoveredSession(recent.manifest)
         return
       }
 
@@ -878,7 +893,8 @@ final class AppCoordinator: ObservableObject {
         durationFrames: session.manifest.durationFrames,
         hasTranscript: session.hasTranscript,
         hasAudio: session.hasAudio,
-        hostedConfiguration: session.manifest.hostedConfiguration
+        hostedConfiguration: session.manifest.hostedConfiguration,
+        failure: session.manifest.failure
       )
     }
   }
@@ -935,6 +951,7 @@ final class AppCoordinator: ObservableObject {
       try await repository.save(finalizing, paths: paths)
       manifest = finalizing
       state = .finalizing(0)
+      await diagnostics.record(DiagnosticEvent(kind: .transcriptionStarted))
 
       let transcript: Transcript
       if let configuration = finalizing.hostedConfiguration {
@@ -943,10 +960,12 @@ final class AppCoordinator: ObservableObject {
         transcript = try await HostedTranscriptionService().transcribe(
           pcmURL: paths.mixedPCM, sessionID: finalizing.id,
           durationFrames: finalizing.durationFrames,
-          configuration: configuration, apiKey: apiKey
-        ) { [weak self] progress in
-          await self?.updateFinalizationProgress(progress)
-        }
+          configuration: configuration, apiKey: apiKey,
+          diagnostic: { [diagnostics] event in await diagnostics.record(event) },
+          progress: { [weak self] progress in
+            await self?.updateFinalizationProgress(progress)
+          }
+        )
       } else {
         try await loadWhisperModelIfNeeded()
         transcript = try await FinalTranscriptionService(engine: whisperEngine).transcribe(
@@ -968,6 +987,7 @@ final class AppCoordinator: ObservableObject {
       endProtectedActivity()
       clearActiveComponents()
       state = .completed
+      await diagnostics.record(DiagnosticEvent(kind: .transcriptionSucceeded))
       await sendCompletionNotification(title: completed.title)
     } catch {
       await handleFinalizationFailure(error)
@@ -1114,6 +1134,11 @@ final class AppCoordinator: ObservableObject {
   }
 
   private func handleFinalizationFailure(_ error: Error) async {
+    await diagnostics.record(
+      DiagnosticEvent(
+        kind: error is CancellationError ? .transcriptionCancelled : .transcriptionFailed,
+        failure: error is CancellationError ? .cancelled : .other
+      ))
     if let repository, var manifest, let paths {
       manifest.failure = SessionFailure(stage: "transcription", message: error.localizedDescription)
       try? manifest.transition(to: .failed)

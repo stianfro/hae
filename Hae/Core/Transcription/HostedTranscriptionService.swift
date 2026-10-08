@@ -75,6 +75,7 @@ public struct HostedTranscriptionService: Sendable {
     durationFrames: Int64,
     configuration: HostedTranscriptionConfiguration,
     apiKey: String,
+    diagnostic: @escaping @Sendable (DiagnosticEvent) async -> Void = { _ in },
     progress: @escaping @Sendable (Double) async -> Void
   ) async throws -> Transcript {
     try Task.checkCancellation()
@@ -107,6 +108,8 @@ public struct HostedTranscriptionService: Sendable {
       throw HostedTranscriptionError.unreadableAudio
     }
 
+    let operationID = UUID()
+    let chunkCount = Int((durationFrames + Int64(Self.chunkFrames) - 1) / Int64(Self.chunkFrames))
     var offsetFrames: Int64 = 0
     var segments: [TranscriptSegment] = []
     while offsetFrames < durationFrames {
@@ -122,33 +125,135 @@ public struct HostedTranscriptionService: Sendable {
       let request = Self.request(
         endpoint: endpoint, configuration: configuration, apiKey: key, pcm: pcm
       )
-      let data: Data
-      let response: HTTPURLResponse
-      do {
-        (data, response) = try await transport.send(request)
-      } catch {
-        if Task.isCancelled || error is CancellationError
-          || (error as? URLError)?.code == .cancelled
-        {
-          throw CancellationError()
-        }
-        if let error = error as? HostedTranscriptionError { throw error }
-        if (error as? URLError)?.code == .timedOut { throw HostedTranscriptionError.timedOut }
-        throw HostedTranscriptionError.networkFailure
-      }
-      try Task.checkCancellation()
-      guard (200..<300).contains(response.statusCode) else {
-        throw HostedTranscriptionError.httpStatus(response.statusCode)
-      }
-      segments += try Self.segments(
-        from: data, offsetFrames: offsetFrames, frameCount: frames
+      let context = RequestDiagnostics(
+        operationID: operationID,
+        chunk: Int(offsetFrames / Int64(Self.chunkFrames)) + 1,
+        chunkCount: chunkCount,
+        audioBytes: pcm.count,
+        audioDurationMS: frames / 16,
+        hasAPIKey: !key.isEmpty,
+        responseFormat: configuration.responseFormat
       )
+      await diagnostic(context.event(.hostedRequestStarted))
+      var responseStatus: Int?
+      var responseBytes: Int?
+      do {
+        try Task.checkCancellation()
+        let (data, response) = try await transport.send(request)
+        responseStatus = response.statusCode
+        responseBytes = data.count
+        await diagnostic(
+          context.event(
+            .hostedResponseReceived, statusCode: response.statusCode, responseBytes: data.count
+          )
+        )
+        try Task.checkCancellation()
+        guard (200..<300).contains(response.statusCode) else {
+          throw HostedTranscriptionError.httpStatus(response.statusCode)
+        }
+        segments += try Self.segments(
+          from: data, offsetFrames: offsetFrames, frameCount: frames
+        )
+      } catch {
+        let normalized = Self.normalizedError(error)
+        let networkCode: Int?
+        if let error = error as? URLError {
+          networkCode = error.code.rawValue
+        } else if let hostedError = normalized as? HostedTranscriptionError,
+          case .networkFailureCode(let code) = hostedError
+        {
+          networkCode = code
+        } else {
+          networkCode = nil
+        }
+        await diagnostic(
+          context.event(
+            .hostedRequestFailed, statusCode: responseStatus, responseBytes: responseBytes,
+            networkCode: networkCode, failure: Self.failureCategory(normalized)
+          )
+        )
+        throw normalized
+      }
       offsetFrames += Int64(frames)
       await progress(Double(offsetFrames) / Double(durationFrames))
     }
     try Task.checkCancellation()
     if durationFrames == 0 { await progress(1) }
     return Transcript(sessionID: sessionID, isFinal: true, segments: segments)
+  }
+
+  private struct RequestDiagnostics {
+    let operationID: UUID
+    let chunk: Int
+    let chunkCount: Int
+    let audioBytes: Int
+    let audioDurationMS: Int
+    let hasAPIKey: Bool
+    let responseFormat: HostedTranscriptionResponseFormat
+    let started = ContinuousClock.now
+
+    func event(
+      _ kind: DiagnosticEvent.Kind,
+      statusCode: Int? = nil,
+      responseBytes: Int? = nil,
+      networkCode: Int? = nil,
+      failure: DiagnosticEvent.Failure? = nil
+    ) -> DiagnosticEvent {
+      let elapsed = started.duration(to: .now).components
+      let elapsedMS = Int(elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000)
+      return DiagnosticEvent(
+        kind: kind,
+        operationID: operationID,
+        chunk: chunk,
+        chunkCount: chunkCount,
+        audioBytes: audioBytes,
+        audioDurationMS: audioDurationMS,
+        responseBytes: responseBytes,
+        elapsedMS: max(0, elapsedMS),
+        statusCode: statusCode,
+        networkCode: networkCode,
+        hasAPIKey: hasAPIKey,
+        responseFormat: responseFormat,
+        failure: failure
+      )
+    }
+  }
+
+  private static func normalizedError(_ error: any Error) -> any Error {
+    if Task.isCancelled || error is CancellationError
+      || (error as? URLError)?.code == .cancelled
+    {
+      return CancellationError()
+    }
+    if let error = error as? HostedTranscriptionError { return error }
+    if let error = error as? URLError {
+      if error.code == .timedOut { return HostedTranscriptionError.timedOut }
+      return HostedTranscriptionError.networkFailureCode(error.code.rawValue)
+    }
+    return HostedTranscriptionError.networkFailure
+  }
+
+  private static func failureCategory(_ error: any Error) -> DiagnosticEvent.Failure {
+    if error is CancellationError { return .cancelled }
+    guard let error = error as? HostedTranscriptionError else { return .other }
+    switch error {
+    case .invalidBaseURL, .invalidModel, .invalidLanguage:
+      return .invalidConfiguration
+    case .invalidAPIKey:
+      return .invalidAPIKey
+    case .invalidAudio:
+      return .invalidAudio
+    case .unreadableAudio:
+      return .unreadableAudio
+    case .httpStatus:
+      return .http
+    case .invalidResponse:
+      return .invalidResponse
+    case .networkFailure, .networkFailureCode:
+      return .network
+    case .timedOut:
+      return .timeout
+    }
   }
 
   private static func request(

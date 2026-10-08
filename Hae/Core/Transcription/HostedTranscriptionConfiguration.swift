@@ -76,6 +76,7 @@ public enum HostedTranscriptionError: Error, LocalizedError, Equatable, Sendable
   case httpStatus(Int)
   case invalidResponse
   case networkFailure
+  case networkFailureCode(Int)
   case timedOut
 
   public var errorDescription: String? {
@@ -95,19 +96,19 @@ public enum HostedTranscriptionError: Error, LocalizedError, Equatable, Sendable
     case .httpStatus(let status):
       switch status {
       case 300..<400:
-        "The hosted endpoint redirected the request. For privacy, Hæ does not follow redirects. Set the final HTTPS API base URL in Settings."
+        "The hosted endpoint redirected the request (HTTP \(status)). For privacy, Hæ does not follow redirects. Set the final HTTPS API base URL in Settings."
       case 401, 403:
-        "The hosted endpoint rejected access. Check the API key and the model permissions in Settings."
+        "The hosted endpoint rejected access (HTTP \(status)). Check the API key and the model permissions in Settings."
       case 404:
-        "The hosted audio transcription endpoint or model was not found. Check the base URL and speech-to-text model ID."
+        "The hosted audio transcription endpoint or model was not found (HTTP \(status)). Check the base URL and speech-to-text model ID."
       case 400, 415, 422:
-        "The hosted endpoint rejected the audio request. Check the model and response format, and confirm it supports audio/transcriptions with WAV uploads."
+        "The hosted endpoint rejected the audio request (HTTP \(status)). Check the model and response format, and confirm it supports audio/transcriptions with WAV uploads."
       case 413:
-        "The hosted endpoint rejected the audio upload size. It must accept WAV chunks of up to 9.6 MB."
+        "The hosted endpoint rejected the audio upload size (HTTP \(status)). It must accept WAV chunks of up to 9.6 MB."
       case 429:
-        "The hosted endpoint is rate-limiting requests. Wait and retry transcription."
+        "The hosted endpoint is rate-limiting requests (HTTP \(status)). Wait and retry transcription."
       case 500..<600:
-        "The hosted endpoint is temporarily unavailable. Retry transcription later."
+        "The hosted endpoint is temporarily unavailable (HTTP \(status)). Retry transcription later."
       default:
         "The hosted endpoint returned HTTP \(status). Check the endpoint settings and retry transcription."
       }
@@ -115,8 +116,34 @@ public enum HostedTranscriptionError: Error, LocalizedError, Equatable, Sendable
       "The hosted endpoint returned an unsupported transcription response. Use a compatible JSON response format and speech-to-text model."
     case .networkFailure:
       "Hæ could not reach the hosted endpoint securely. Check the URL, network connection, and server certificate."
+    case .networkFailureCode(let code):
+      "\(Self.networkFailureDescription(code)) (network error \(code))."
     case .timedOut:
       "The hosted transcription request timed out. Check the endpoint and retry transcription."
     }
   }
+
+  private static func networkFailureDescription(_ code: Int) -> String {
+    switch code {
+    case URLError.Code.notConnectedToInternet.rawValue:
+      "The Mac appears to be offline. Check your network connection and retry"
+    case URLError.Code.cannotFindHost.rawValue, URLError.Code.dnsLookupFailed.rawValue:
+      "The hosted server name could not be resolved. Check the URL and DNS connection"
+    case URLError.Code.cannotConnectToHost.rawValue:
+      "Hæ could not connect to the hosted server. Check that the endpoint is available"
+    case URLError.Code.networkConnectionLost.rawValue:
+      "The connection to the hosted server was interrupted. Retry transcription"
+    case URLError.Code.secureConnectionFailed.rawValue,
+      URLError.Code.serverCertificateHasBadDate.rawValue,
+      URLError.Code.serverCertificateUntrusted.rawValue,
+      URLError.Code.serverCertificateHasUnknownRoot.rawValue,
+      URLError.Code.serverCertificateNotYetValid.rawValue,
+      URLError.Code.clientCertificateRejected.rawValue,
+      URLError.Code.clientCertificateRequired.rawValue:
+      "A secure connection to the hosted server could not be established. Check its TLS certificate and access requirements"
+    default:
+      "Hæ could not complete the hosted request. Check the endpoint and network connection"
+    }
+  }
+
 }

@@ -27,6 +27,8 @@ struct SettingsView: View {
       .tabItem { Label("Transcription", systemImage: "text.bubble") }
       storageSettings
         .tabItem { Label("Storage", systemImage: "externaldrive") }
+      DiagnosticsSettingsView(controller: coordinator.diagnostics)
+        .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
     }
     .padding(16)
     .frame(width: 620, height: 630)
@@ -389,6 +391,72 @@ private struct GainControl: View {
       Slider(value: $value, in: 0...1.5, step: 0.1)
         .accessibilityLabel(label)
         .accessibilityValue("\(value, specifier: "%.1f") times")
+    }
+  }
+}
+
+private struct DiagnosticsSettingsView: View {
+  @ObservedObject var controller: DiagnosticsController
+  @State private var showClearConfirmation = false
+
+  var body: some View {
+    Form {
+      Section("Debug logging") {
+        Toggle(
+          "Record debug diagnostics",
+          isOn: Binding(
+            get: { controller.isEnabled },
+            set: { controller.setEnabled($0) }
+          )
+        )
+        .disabled(controller.isWorking)
+        Text(
+          "Off by default. Turn this on before reproducing a problem, then export the log to help investigate it."
+        )
+        .foregroundStyle(.secondary)
+        Label {
+          Text(
+            "Logs contain only timing, status and error codes, chunk metadata, and whether an API key was present. They never contain API keys, audio, transcripts, URLs, model names, or raw server responses."
+          )
+        } icon: {
+          Image(systemName: "lock.shield")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        Text(
+          "Logs stay on this Mac and are limited in size. Turning logging off stops new entries; it does not remove existing entries. Nothing is uploaded automatically."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+      Section("Log files") {
+        HStack {
+          Button("Export debug log…", action: controller.exportLog)
+          Button("Clear debug log…", role: .destructive) { showClearConfirmation = true }
+          if controller.isWorking {
+            ProgressView()
+              .controlSize(.small)
+              .accessibilityLabel("Updating debug log")
+          }
+        }
+        .disabled(controller.isWorking)
+        if let notice = controller.notice {
+          Text(notice)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+        }
+      }
+    }
+    .formStyle(.grouped)
+    .confirmationDialog("Clear the debug log?", isPresented: $showClearConfirmation) {
+      Button("Clear debug log", role: .destructive, action: controller.clearLog)
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "This deletes saved diagnostic entries on this Mac. It does not delete recordings, transcripts, or copies you already exported."
+      )
     }
   }
 }

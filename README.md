@@ -75,6 +75,30 @@ recording. Local retention settings do not control copies held by your provider.
 Provider-specific compatibility must be checked with its audio API docs or a
 short recording you have permission to upload.
 
+## Troubleshooting
+
+The tray shows full, selectable error details with a **Copy error details**
+button. Past failures are available from a history item's **Show error details**
+menu action. Hosted errors include the HTTP status or a safe network error code.
+
+For more detail, open **Settings > Diagnostics**, enable **Debug logging**, then
+retry the failed transcription. Choose **Export debug log** to save a local
+JSON Lines file you can inspect before sharing. Nothing is uploaded automatically.
+
+Debug logging is off by default. It records timestamps, random operation IDs,
+chunk sizes and durations, request timing, response status, network error codes,
+and whether an API key was attached. It never records the key itself, headers,
+URLs, model names, audio, transcripts, session titles, or raw server responses.
+The local log keeps at most 1,000 events and 1 MiB under `Hae/Diagnostics` in the
+application support directory. It persists across restarts until cleared or
+replaced by newer events. Disable logging when finished; **Clear debug log**
+removes retained diagnostics without touching recordings or settings.
+
+For HTTP 401 or 403, check that the full API key was entered in Hæ and saved for
+the current endpoint. The shortened key prefix shown by some providers is not a
+usable credential. Editing the endpoint clears an unsaved key, so enter the URL
+before the key. Updating the saved key also applies when retrying the same session.
+
 ## Development tasks
 
 ```bash
