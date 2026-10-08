@@ -188,7 +188,6 @@ struct MenuBarView: View {
     .padding(16)
     .frame(width: 380)
     .onAppear { coordinator.refreshMicrophones() }
-    .task { await coordinator.refreshDisplays() }
     .alert("Quit Hæ?", isPresented: $showQuitConfirmation) {
       Button("Keep running", role: .cancel) {}
       Button("Quit", role: .destructive) { NSApplication.shared.terminate(nil) }

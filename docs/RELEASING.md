@@ -67,6 +67,26 @@ application only with:
 
 Do not instruct testers to disable Gatekeeper globally.
 
+## Permission-stable local builds
+
+Ad hoc signing ties macOS privacy approval to a particular build, so replacing
+the app can invalidate Screen Recording permission. For repeated development
+installs, use the same Apple Development identity and install path each time:
+
+```bash
+security find-identity -v -p codesigning
+HAE_CODESIGN_IDENTITY='Apple Development: Name (IDENTIFIER)' just package-release
+```
+
+Use a valid identity from the command output. Switching from ad hoc signing to
+a certificate changes the app's identity once, so the user may need to approve
+the new app in System Settings and relaunch it. Subsequent builds should retain
+that identity. Apple Development signing is for local development, not public
+distribution; public builds still require Developer ID and notarization.
+
+Do not work around privacy checks with a broad code-signing requirement, TCC
+database edits, or automatic permission resets.
+
 ## Publish with GitHub CLI
 
 The release should remain a draft until the manual checks in

@@ -102,6 +102,13 @@ confirms the two-source capture, mixing, and final transcription path. The
 
 ## Hosted transcription and settings
 
+- Before granting Screen Recording access, open and close the tray, open
+  Settings, and refresh audio sources several times. None of these passive
+  actions should show an OS capture-permission prompt. Display discovery reads
+  display IDs and dimensions, not ScreenCaptureKit shareable content.
+- Click Start recording to request capture access explicitly. After approval
+  in System Settings and any required app relaunch, repeat recording and tray
+  opening. Repeat after an update signed with the same development identity.
 - Open Settings from the tray and Command+,. It must remain usable after the
   popover closes; reopening must focus the existing window, not create duplicates.
 - Switch tabs, edit fields, cancel/reopen file panels, and open history menus
